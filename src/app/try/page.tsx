@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { loadHomeownerTryPageState } from "@/lib/actions/homeowner-try";
 import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client";
+import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,29 @@ export default async function RenovisionTryPage() {
             Back to home
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  const needsAnonymousBootstrap = !state.userEmail && !state.anonymousSessionId;
+
+  if (needsAnonymousBootstrap) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-renovision-navy-muted/25 to-background">
+        <header className="border-b border-border/60 bg-background/85 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+            <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
+              Renovision
+            </Link>
+            <Link
+              href="/"
+              className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
+            >
+              ← Home
+            </Link>
+          </div>
+        </header>
+        <TryAnonSessionBootstrap />
       </div>
     );
   }

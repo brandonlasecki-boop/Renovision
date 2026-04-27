@@ -789,7 +789,11 @@ const QUALITY_RESCUE_PROMPT = [
   "- No architectural redesign; finishes and style only",
 ].join("\n");
 
-async function getViewerContext() {
+/**
+ * @param allowCookieMutation - Must be `false` when called from a Server Component (e.g. `/try` page load).
+ * Next.js only allows `cookies().set` inside Server Actions / Route Handlers, not during RSC render.
+ */
+async function getViewerContext(allowCookieMutation: boolean) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -797,7 +801,9 @@ async function getViewerContext() {
 
   const anonymousSessionId = user
     ? await getRenovisionAnonymousSessionIdFromCookie()
-    : await getOrCreateRenovisionAnonymousSessionId();
+    : allowCookieMutation
+      ? await getOrCreateRenovisionAnonymousSessionId()
+      : await getRenovisionAnonymousSessionIdFromCookie();
 
   if (anonymousSessionId) {
     await ensureRenovisionAnonymousSessionRow(anonymousSessionId);
@@ -829,7 +835,7 @@ async function trackTryEvent(opts: {
 
 export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState> {
   try {
-    const { userEmail, anonymousSessionId } = await getViewerContext();
+    const { userEmail, anonymousSessionId } = await getViewerContext(false);
     return {
       ok: true,
       anonymousSessionId,
@@ -839,6 +845,21 @@ export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState
     return {
       ok: false,
       message: e instanceof Error ? e.message : "Could not load page.",
+    };
+  }
+}
+
+/** First visit to `/try` as guest: RSC cannot set cookies — client calls this Server Action, then `router.refresh()`. */
+export async function bootstrapTryAnonymousSessionAction(): Promise<
+  { ok: true } | { ok: false; message: string }
+> {
+  try {
+    await getViewerContext(true);
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not start session.",
     };
   }
 }
@@ -890,7 +911,7 @@ export async function generateBathroomMockupAction(
     return { error: "Image must be 20 MB or smaller." };
   }
 
-  const viewer = await getViewerContext();
+  const viewer = await getViewerContext(true);
   if (!viewer.userId && !viewer.anonymousSessionId) {
     return { error: "Could not start your session." };
   }
@@ -1138,7 +1159,7 @@ export async function regenerateBathroomMockupAction(
   const imageSource = str(formData, "image_source") || "original";
   const sourceMockupId = str(formData, "source_mockup_id");
 
-  const viewer = await getViewerContext();
+  const viewer = await getViewerContext(true);
   const svc = createServiceClient();
 
   let regenerateFromRoom = true;
@@ -1390,7 +1411,7 @@ export async function selectTryMockupVersionAction(
   const mockupId = str(formData, "mockup_id");
   if (!generationId || !projectId || !mockupId) return { error: "Missing selection." };
 
-  const viewer = await getViewerContext();
+  const viewer = await getViewerContext(true);
   const svc = createServiceClient();
 
   if (!(await mockupBelongsToProject(projectId, mockupId))) {
@@ -1474,7 +1495,7 @@ export async function trackConnectClickedAction(
 ): Promise<{ success: true }> {
   const projectId = str(formData, "project_id");
   const generationId = str(formData, "generation_id");
-  const viewer = await getViewerContext();
+  const viewer = await getViewerContext(true);
   await trackTryEvent({
     eventType: "connect_clicked",
     userId: viewer.userId,
@@ -1507,7 +1528,7 @@ export async function submitBathroomLeadAction(
     return { error: "Please complete all required fields." };
   }
 
-  const viewer = await getViewerContext();
+  const viewer = await getViewerContext(true);
   const svc = createServiceClient();
   await svc.from("leads").insert({
     generation_id: generationId,
