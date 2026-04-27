@@ -4,8 +4,8 @@ import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client"
 
 export const dynamic = "force-dynamic";
 
-/** Homeowner preview: Vertex mockup + OpenAI QA + optional rescue + estimate can exceed 800s wall clock. */
-export const maxDuration = 1100;
+/** Homeowner preview: long AI pipeline; capped at 300s for Vercel Hobby (raise on Pro/Enterprise if needed). */
+export const maxDuration = 300;
 
 export const metadata = {
   title: "Try your remodel preview",
