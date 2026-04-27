@@ -65,5 +65,7 @@ export function bufferToDataUrl(norm: NormalizedImageBytes): string {
 }
 
 export function bufferToArrayBuffer(buf: Buffer): ArrayBuffer {
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  const out = new ArrayBuffer(buf.length);
+  new Uint8Array(out).set(buf);
+  return out;
 }
