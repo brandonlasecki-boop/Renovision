@@ -753,6 +753,8 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
               `You will then receive one or more AFTER MOCKUP image(s): AI-produced target render(s) of the **same room** as the BEFORE set (same camera / footprint). These are NOT catalog product sheets — they show the intended finished look.`,
               `BEFORE vs AFTER (mandatory when AFTER mockup images are present):`,
               `- Systematically compare BEFORE photos to EACH AFTER mockup. In roomAnalysis, after your baseline room inventory, append a section exactly titled "--- Before vs after mockup ---" then bullet every substantive visual difference (surfaces, fixtures, lighting, hardware, trim, paint/tile/stone, mirrors, glass, accessories removed/added, grout/color, cabinet faces, countertops, etc.). Omit microscopic JPEG noise; include anything a contractor would scope or price.`,
+              `- WINDOWS, DOORS & ROUGH OPENINGS (critical — do not skip): For every window and exterior/interior door **visible** in BEFORE, compare rough opening width/height, sill/stool line, head height, number of lites/mullions, grille pattern, and trim/casing footprint to AFTER. If AFTER shows a **larger** window or door, a **new** opening, a **combined** opening where BEFORE had separate units, or **less** visible jamb/casing (suggesting a wider unit), you MUST call that out explicitly in the diff (e.g. "window rough opening appears widened/taller vs before"). Treat obvious fenestration changes as **structural/envelope work**, not a finish-only swap.`,
+              `- When you identify any opening enlargement, new opening, or non-cosmetic window/door change vs BEFORE: materials MUST add separate ROM lines (even if contractor scope did not mention them) for: selective demo and framing repair; header/jack/king stud package or engineered header as appropriate; sill pan / extension jambs / insulation & air sealing; WRB integration and exterior flashing; new or resized window or door **unit + install labor**; interior and exterior trim/stop; drywall/patch and paint touch-up; exterior siding or stucco patch/match where applicable; **permit / plan review allowance** when work is beyond a same-size insert replacement. Use trades general, labor, permits, drywall, paint, other as fits; split into multiple lines so the estimate is bid-ready.`,
               `- materials: must include explicit ROM line items for **each** substantive delta you listed (plus scope-driven work visible only in BEFORE). Reconcile with contractor quote lines when provided: keep their intent, add any missing lines implied by the AFTER image that scope/quote did not capture, and adjust quantities/notes when the AFTER image makes a clearer quantity (e.g. wall tile field, shower surround, vanity run). Do not drop a visible change because it was absent from an older quote.`,
               `- remodelEditPrompt: describe how to transform the BEFORE photo toward the AFTER look while respecting layout rules below; do not invent new fixture locations.`,
             ]
@@ -764,8 +766,8 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
           : []),
         `BATH VANITY / CABINET SIZING (when BEFORE photos show a bathroom): From the photos, estimate the maximum realistic vanity or cabinet width that fits the visible wall run (clearances, adjacent toilet/tub, door swing, trim). State that range in roomAnalysis (e.g. "vanity wall ~36–48 in usable"). For any vanity or vanity+sink material line, put sizing in notes so the ROM does not assume a fixture clearly wider than that visible space unless scope names a specific width.`,
         `Reply with a single JSON object only, no markdown, with this exact shape:`,
-        `{"summary":"2-4 sentences for the contractor, professional tone","materials":[{"name":"string","quantity":number,"unit":"string","unit_price_usd":number,"extended_usd":number,"notes":"optional","trade":"one of: general | electrical | plumbing | hvac | drywall | flooring | paint | cabinetry | tile | labor | permits | other"}],"roomAnalysis":"Detailed: room type; layout; doors, windows, major walls; visible plumbing fixtures, drains, tub/shower, vanity/sink; visible electrical; flooring/wall finishes; constraints. For bathrooms: include approximate max vanity width that fits the visible layout (from the photo), not a catalog default. If contractor scope does NOT mention toilet work, do NOT use the word toilet here. CRITICAL: If a fixture is not visible in any before photo, write NOT VISIBLE IN FRAME — do not guess position or describe off-camera coordinates. Never infer fixture placement from accessories alone.${hasAfterMockup ? " When AFTER mockups are provided, you MUST include the section --- Before vs after mockup --- with an exhaustive bullet list of visual differences as instructed above." : ""}","remodelEditPrompt":"Instructions for an image editor that will receive the BEFORE photo. If contractor scope does NOT mention toilet work, do NOT use the word toilet in this field. CRITICAL: For fixtures VISIBLE in the photo, keep shower/tub, vanity, drains in place unless scope requires moving rough plumbing. If a fixture is NOT visible, do not instruct the editor to add or place it. Never swap fixture locations. Demand the SAME room, SAME camera angle, SAME wall/window/door openings and ceiling line. FORMAT: (1) PERMITTED CHANGES ONLY: bullets of ONLY visual changes required by scope, quote lines, additional instructions${hasAfterMockup ? ", and the AFTER mockup relative to BEFORE" : ""}. (2) UNCHANGED: layout, perspective, finishes not changing — if scope omits toilet work, do not list toilet. (3) Only describe pixels that may change; no people; no text in image."}`,
-        `Materials must be a detailed ROM itemization where appropriate: include separate lines for electrical (rough-in, devices, GFCI/AFCI as needed), plumbing (supply, drain, valves, fixtures if in scope), HVAC/ventilation if relevant, drywall/patch, paint, flooring, tile/backer, cabinetry, permits, demo, and labor buckets when the scope implies them. Tag each line with the correct "trade". Use many lines when the scope is large; do not collapse into one lump sum unless scope is tiny.`,
+        `{"summary":"2-4 sentences for the contractor, professional tone","materials":[{"name":"string","quantity":number,"unit":"string","unit_price_usd":number,"extended_usd":number,"notes":"optional","trade":"one of: general | electrical | plumbing | hvac | drywall | flooring | paint | cabinetry | tile | labor | permits | other"}],"roomAnalysis":"Detailed: room type; layout; doors, windows, major walls; visible plumbing fixtures, drains, tub/shower, vanity/sink; visible electrical; flooring/wall finishes; constraints. For bathrooms: include approximate max vanity width that fits the visible layout (from the photo), not a catalog default. If contractor scope does NOT mention toilet work, do NOT use the word toilet here. CRITICAL: If a fixture is not visible in any before photo, write NOT VISIBLE IN FRAME — do not guess position or describe off-camera coordinates. Never infer fixture placement from accessories alone.${hasAfterMockup ? " When AFTER mockups are provided, you MUST include the section --- Before vs after mockup --- with an exhaustive bullet list of visual differences as instructed above. In that section, explicitly compare each visible window and exterior/interior door between BEFORE and AFTER (rough opening size, head/sill lines, mullions, casing footprint); if AFTER suggests a larger, new, or merged opening, say so plainly." : ""}","remodelEditPrompt":"Instructions for an image editor that will receive the BEFORE photo. If contractor scope does NOT mention toilet work, do NOT use the word toilet in this field. CRITICAL: For fixtures VISIBLE in the photo, keep shower/tub, vanity, drains in place unless scope requires moving rough plumbing. If a fixture is NOT visible, do not instruct the editor to add or place it. Never swap fixture locations. Demand the SAME room, SAME camera angle, SAME wall/window/door openings and ceiling line. FORMAT: (1) PERMITTED CHANGES ONLY: bullets of ONLY visual changes required by scope, quote lines, additional instructions${hasAfterMockup ? ", and the AFTER mockup relative to BEFORE" : ""}. (2) UNCHANGED: layout, perspective, finishes not changing — if scope omits toilet work, do not list toilet. (3) Only describe pixels that may change; no people; no text in image."}`,
+        `Materials must be a detailed ROM itemization where appropriate: include separate lines for electrical (rough-in, devices, GFCI/AFCI as needed), plumbing (supply, drain, valves, fixtures if in scope), HVAC/ventilation if relevant, drywall/patch, paint, flooring, tile/backer, cabinetry, permits, demo, and labor buckets when the scope implies them. When BEFORE vs AFTER (or scope) implies **larger or new windows/doors**, include explicit framing, opening prep, flashing, unit+install, trim, and permit lines — never fold that into a single generic "window" material line without construction detail. Tag each line with the correct "trade". Use many lines when the scope is large; do not collapse into one lump sum unless scope is tiny.`,
         `Rules for materials: approximate US retail pricing as of 2026; quantity * unit_price_usd ≈ extended_usd.`,
       ].join("\n"),
     },
@@ -1243,6 +1245,16 @@ export const MOCKUP_ITERATION_REFINE = [
   "Apply small deltas: only what quote lines, product references, or explicit scope items still need changed vs what is already visible in this image.",
 ].join("\n");
 
+/** When “Changes for this render” / per-run notes are present — suppresses re-driving the whole quote. */
+export const PER_RUN_TWEAK_IMAGE_LOCK = [
+  "PER-RUN TWEAK MODE (contractor “Changes for this render” is non-empty):",
+  "The ONLY intentional edits are **PERMITTED VISUAL CHANGES** below. The input image is already correct for everything else.",
+  "Do NOT re-execute, complete, or “fix” mockup quote lines, full-estimate context, or contractor scope for this pass unless PERMITTED VISUAL CHANGES explicitly names the same fixture or surface.",
+  "If catalog/contractor product JPEGs are still attached after the room image, treat them as **inactive** unless PERMITTED VISUAL CHANGES explicitly points at that product or line — do not apply shelf looks to any surface not named.",
+  "If a REFERENCE LOOKS / product-summary block appears later in this prompt, same rule: ignore for pixels unless PERMITTED VISUAL CHANGES names that item.",
+  "Do not relight, recolor, sharpen, denoise, or beautify the room globally. Match exposure, white balance, and grain to the input outside the edited region.",
+].join("\n");
+
 /**
  * Text for image edit + DALL·E fallback. When additionalPrompt is set, vision remodelEditPrompt
  * is excluded so the image model cannot drift from analysis/scope.
@@ -1363,6 +1375,8 @@ export function buildStrictRemodelEditPrompt(params: {
   if (add) {
     const finishFreeze = [
       "",
+      "TWEAK-ONLY — GLOBAL SOURCE LOCK:",
+      "The output must match the **input image** everywhere except the **smallest** regions needed to satisfy PERMITTED VISUAL CHANGES. No whole-room refresh, no “while we’re here” upgrades, no harmonizing unrelated finishes.",
       "FINISH FREEZE:",
       "Only what PERMITTED VISUAL CHANGES names may look different. All other surfaces and objects must match the input photo.",
       "Mirror/medicine-cabinet/sconce-only wording does NOT include permission to change vanity, cabinets, countertop, sink, vanity faucet, doors, door knobs/levers, wall planes, trim, or towel bars/racks/hooks unless those words appear.",
@@ -1451,6 +1465,9 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
     : MOCKUP_IN_PLACE_EDIT_HEADER;
   const quoteTrimmed = quoteLineContext?.trim() ?? "";
   const additionalTrimmed = additionalPrompt?.trim() ?? "";
+  /** Contractor filled “Changes for this render” — image model must not re-run the whole quote/estimate. */
+  const perRunTweakMode = additionalTrimmed.length > 0;
+  const quoteForPrompt = perRunTweakMode ? "" : quoteTrimmed;
   const leadIn = buildImageEditLeadIn(scopeHasToilet);
   const roomForImage = sanitizeRoomAnalysisForMockupImage(roomAnalysis, ruleScope);
   const remodelForImage = sanitizeRemodelEditPromptForMockupImage(remodelEditPrompt, ruleScope);
@@ -1479,24 +1496,25 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
       : {}),
   };
 
-  const quoteSection = quoteTrimmed.length
-    ? ["", "Mockup quote lines (do each line that matches this photo):", quoteTrimmed].join("\n")
+  const quoteSection = quoteForPrompt.length
+    ? ["", "Mockup quote lines (do each line that matches this photo):", quoteForPrompt].join("\n")
     : "";
 
   const fullEst = vertexBrief.length > 0 ? "" : (fullEstimateContext?.trim() ?? "");
+  const fullEstForPrompt = perRunTweakMode ? "" : fullEst;
   const fullEstSection =
-    fullEst.length > 0
+    fullEstForPrompt.length > 0
       ? [
           "",
           "COMPLETE ESTIMATE (context only — ignore work for other rooms):",
-          fullEst,
+          fullEstForPrompt,
           "[mockup: ON + ref] may have JPEGs after the room image; [mockup: OFF] is context only.",
           "",
         ].join("\n")
       : "";
 
   const quoteRefBlock =
-    quoteTrimmed.length > 0 ? quoteDrivenProductReferenceBlock({ vanityCabinetReplacement }) : "";
+    quoteForPrompt.length > 0 ? quoteDrivenProductReferenceBlock({ vanityCabinetReplacement }) : "";
 
   const taskCore = [
     "TASK: Photorealistic edit of the attached room image. Same room, same camera — no whole-frame flip.",
@@ -1527,12 +1545,20 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
   if (additionalTrimmed.length > 0) {
     const baselineBlock =
       imageEditSource === "latest_mockup" ? `${LATEST_MOCKUP_AS_BASELINE}\n\n` : "";
+    const tweakGuards = [
+      PER_RUN_TWEAK_IMAGE_LOCK,
+      MOCKUP_ITERATION_REFINE,
+      INCREMENTAL_SURGICAL_EDIT,
+      MINIMAL_CHANGE_PROTOCOL,
+      SURFACE_ARCHITECTURE_HARDWARE_LOCK,
+    ].join("\n\n");
     return appendMockupLayoutFooter(
       [
         corePrefix,
         baselineBlock,
-        quoteRefBlock,
-        "Implement only the mockup lines above and PERMITTED VISUAL CHANGES below. Everything else must match the photo.",
+        tweakGuards,
+        "",
+        "Implement **only** PERMITTED VISUAL CHANGES below. Every other pixel must match the input image (same materials, colors, grout, lighting character, and geometry).",
         "",
         remodelMerged,
       ].join("\n"),

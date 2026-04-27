@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Prefer `public/renovision-looping-logo.webm`: VP9 WebM can carry alpha so the logo composites
- * over the “before” photo without a green screen.
+ * Prefer `public/renovision-looping-logo.webm`: VP9 WebM with a green plate, keyed out on canvas over the photo.
  *
- * **Do not chain H.264 MP4 here:** `renovision-looping-logo.mp4` uses a chroma-green plate; on
- * production (Safari, CDN, or decode quirks) WebM can fail first and the MP4 fallback reads as a
- * green rectangle because canvas chroma-keying is inconsistent across GPUs/browsers.
+ * **Do not chain H.264 MP4 here:** `renovision-looping-logo.mp4` uses a chroma-green plate; if WebM fails first,
+ * MP4 reads as a solid green block on some browsers when canvas keying is inconsistent.
  * If WebM fails, we go straight to the static PNG/wordmark fallback.
  */
 const LOADER_VIDEO_SRC_CHAIN = ["/renovision-looping-logo.webm"] as const;
@@ -48,7 +46,6 @@ function chromaWorkScale(bw: number, bh: number): number {
 function chromaKeyedAlpha(r: number, g: number, b: number): number {
   const maxRb = Math.max(r, b);
   const excessGreen = g - maxRb;
-  // Avoid eating legitimate dark/near-neutral pixels.
   if (g < 58) return 255;
   if (excessGreen < 10) return 255;
   const t0 = 10;

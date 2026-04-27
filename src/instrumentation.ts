@@ -10,5 +10,5 @@ export async function register() {
   const { registerGcpServiceAccountJsonFromEnv } = await import(
     "./instrumentation-bootstrap-gcp-sa"
   );
-  registerGcpServiceAccountJsonFromEnv();
+  await registerGcpServiceAccountJsonFromEnv();
 }

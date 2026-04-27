@@ -1,3 +1,5 @@
+import "server-only";
+
 import {
   GoogleGenAI,
   Modality,
@@ -8,7 +10,6 @@ import {
 import { truncateMockupTextPromptWithLayoutReinforcement } from "@/lib/ai/mockup-prompt-truncate";
 import { VERTEX_GEMINI_IMAGE_MODEL_ID } from "@/lib/ai/mockup-image-provider";
 import { loadVercelWorkloadIdentityGoogleAuthOptions } from "@/lib/ai/vercel-wif-vertex-auth";
-import { applyGcpServiceAccountJsonFromEnvIfNeeded } from "@/lib/integrations/gcp-service-account-json-bootstrap";
 import { productReferenceImageFetchCandidateUrls } from "@/lib/integrations/retail-product-image-lightbox";
 
 function serializeVertexClientError(err: unknown): string {
@@ -480,7 +481,10 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
     throw new Error("Vertex mockup: empty GOOGLE_CLOUD_PROJECT after trimming.");
   }
   /** Vercel: instrumentation may not run before this lambda; JSON env is applied here too. */
-  applyGcpServiceAccountJsonFromEnvIfNeeded();
+  const { applyGcpServiceAccountJsonFromEnvIfNeededAsync } = await import(
+    "@/lib/integrations/gcp-service-account-json-bootstrap"
+  );
+  await applyGcpServiceAccountJsonFromEnvIfNeededAsync();
   const wifAuth = await loadVercelWorkloadIdentityGoogleAuthOptions();
   if (
     process.env.VERCEL &&

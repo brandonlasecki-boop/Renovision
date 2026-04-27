@@ -5,8 +5,10 @@ import {
   useActionState,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { Camera, ChevronDown, Images, PiggyBank, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,20 @@ function formatTweakImpactBand(s: TryTweakSuggestion): string {
 }
 
 type TryMockupVersionRow = { id: string; label: string; imageUrl: string; storagePath: string };
+
+/** Copy a picked `File` onto the real form `<input name="bathroom_photo">` (camera vs library use separate pickers). */
+function assignImageToFileInput(target: HTMLInputElement, file: File | undefined | null) {
+  if (!file) return;
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    target.files = dt.files;
+  } catch {
+    return;
+  }
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+  target.dispatchEvent(new Event("change", { bubbles: true }));
+}
 
 /** Left side of compare — display only; does not change which mockup edits/regen use. */
 function CompareBeforePicker({
@@ -178,6 +194,9 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
   const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
   const [firstUploadPreviewUrl, setFirstUploadPreviewUrl] = useState<string | null>(null);
+  const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
+  const bathroomCameraInputRef = useRef<HTMLInputElement>(null);
+  const bathroomLibraryInputRef = useRef<HTMLInputElement>(null);
 
   const [generateState, generateAction, generatePending] = useActionState(generateBathroomMockupAction, undefined);
   const [regenState, regenAction, regenPending] = useActionState(regenerateBathroomMockupAction, undefined);
@@ -208,12 +227,13 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
               generatedImageUrl: regenState.generatedImageUrl,
               estimateRange: regenState.estimateRange,
               breakdown: regenState.breakdown,
-              detailedBreakdown: regenState.detailedBreakdown,
-              reasoning: regenState.reasoning,
-              assumptions: regenState.assumptions,
+              detailedBreakdown: regenState.detailedBreakdown ?? prev.detailedBreakdown ?? [],
+              reasoning: regenState.reasoning ?? prev.reasoning ?? [],
+              assumptions: regenState.assumptions ?? prev.assumptions ?? [],
               confidence: regenState.confidence,
-              saveMoneySuggestions: regenState.saveMoneySuggestions,
-              improveDesignSuggestions: regenState.improveDesignSuggestions,
+              saveMoneySuggestions: regenState.saveMoneySuggestions ?? prev.saveMoneySuggestions ?? [],
+              improveDesignSuggestions:
+                regenState.improveDesignSuggestions ?? prev.improveDesignSuggestions ?? [],
               mockupVersions: regenState.mockupVersions,
               activeMockupId: regenState.activeMockupId,
             }
@@ -418,11 +438,13 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                     )}
                   </div>
                   <div className="space-y-2 p-4">
-                    <p className="text-base font-semibold">{style.name}</p>
+                    <div className="flex min-w-0 items-baseline justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-base font-semibold leading-tight">{style.name}</p>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums text-renovision-navy">
+                        ${Math.round(style.estimateMin / 1000)}K–${Math.round(style.estimateMax / 1000)}K
+                      </p>
+                    </div>
                     <p className="text-sm text-muted-foreground">{style.subtitle}</p>
-                    <p className="text-sm font-medium">
-                      ${Math.round(style.estimateMin / 1000)}K-${Math.round(style.estimateMax / 1000)}K
-                    </p>
                     <Button
                       type="button"
                       className="w-full rounded-xl"
@@ -465,19 +487,88 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                 <p className="mt-1 text-xs font-medium text-renovision-navy">Selected style: {selectedStyleConfig.name}</p>
               ) : null}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="bathroom_photo">Bathroom image</Label>
-              <Input
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="bathroom_photo" className="text-sm font-medium">
+                  Bathroom photo
+                </Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Take a new picture with your camera, or choose one from your photo library.
+                </p>
+              </div>
+              <input
+                ref={bathroomPhotoInputRef}
                 id="bathroom_photo"
                 name="bathroom_photo"
                 type="file"
                 accept="image/*"
                 required
+                className="sr-only"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   setFirstUploadPreviewUrl(file ? URL.createObjectURL(file) : null);
                 }}
               />
+              <input
+                ref={bathroomCameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  const main = bathroomPhotoInputRef.current;
+                  if (main && file) assignImageToFileInput(main, file);
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={bathroomLibraryInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  const main = bathroomPhotoInputRef.current;
+                  if (main && file) assignImageToFileInput(main, file);
+                  e.target.value = "";
+                }}
+              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full justify-center gap-2 rounded-xl border-dashed text-base sm:h-11"
+                  onClick={() => bathroomCameraInputRef.current?.click()}
+                >
+                  <Camera className="size-5 shrink-0" aria-hidden />
+                  Take photo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full justify-center gap-2 rounded-xl border-dashed text-base sm:h-11"
+                  onClick={() => bathroomLibraryInputRef.current?.click()}
+                >
+                  <Images className="size-5 shrink-0" aria-hidden />
+                  Photo library
+                </Button>
+              </div>
+              {firstUploadPreviewUrl ? (
+                <div className="relative mx-auto mt-3 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-muted">
+                  <Image
+                    src={firstUploadPreviewUrl}
+                    alt="Selected bathroom preview"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                </div>
+              ) : null}
             </div>
             {generateState && "error" in generateState ? (
               <p className="text-sm text-destructive">{generateState.error}</p>
@@ -570,195 +661,284 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
-              <p className="text-sm font-medium text-muted-foreground">{generation.styleName}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Active prompt profile: {activePromptProfile}</p>
-              <p className="mt-1 text-lg font-semibold">
-                Estimated remodel range: {usd.format(generation.estimateRange.min)}-{usd.format(generation.estimateRange.max)}
-              </p>
-              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                <p>
-                  Materials: {usd.format(generation.breakdown.materials.min)}-{usd.format(generation.breakdown.materials.max)}
+            <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
+              <div className="border-b border-border/60 bg-gradient-to-br from-renovision-navy-muted/45 via-card to-card px-4 py-5 sm:px-6 sm:py-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-renovision-orange">
+                  Refine your mockup
                 </p>
-                <p>
-                  Labor: {usd.format(generation.breakdown.labor.min)}-{usd.format(generation.breakdown.labor.max)}
-                </p>
-                <p>
-                  Fixtures / finishes: {usd.format(generation.breakdown.fixtures.min)}-{usd.format(generation.breakdown.fixtures.max)}
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tweak the design</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Pick ideas below (and/or add your own notes).{" "}
+                  <span className="font-medium text-foreground">Update preview</span> reruns from your{" "}
+                  <strong className="font-semibold text-foreground">current after</strong> image — same room layout,
+                  finish-only edits. Dollar hints are AI ballparks, not a bid.
                 </p>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">Estimator confidence: {generation.confidence}</p>
-              <div className="mt-4 space-y-2">
-                <p className="text-sm font-semibold">Detailed line-item estimate</p>
-                <div className="space-y-2 text-sm">
-                  {generation.detailedBreakdown.map((item) => (
-                    <div key={`${item.category}-${item.min}-${item.max}`} className="rounded-lg border border-border/70 p-3">
-                      <p className="font-medium">
-                        {item.category}: {usd.format(item.min)}-{usd.format(item.max)}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.reason}</p>
+
+              <div className="p-4 sm:p-6">
+                <form action={regenAction} className="space-y-5 sm:space-y-6">
+                  <input type="hidden" name="generation_id" value={generation.generationId} />
+                  <input type="hidden" name="project_id" value={generation.projectId} />
+                  <input type="hidden" name="selected_style" value={generation.selectedStyle} />
+                  <input type="hidden" name="image_source" value="current_mockup" />
+                  <input type="hidden" name="source_mockup_id" value={generation.activeMockupId} />
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                    <div
+                      className="space-y-3 rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.07] to-card p-4 shadow-sm sm:p-5"
+                      role="group"
+                      aria-label="Lower cost suggestions"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600/15 text-emerald-800 dark:text-emerald-400">
+                          <PiggyBank className="size-5" strokeWidth={2} aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-semibold text-foreground">Lower cost</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            Finish swaps that lean cheaper. Same walls, openings, and fixture positions.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
+                          const impact = formatTweakImpactBand(row);
+                          return (
+                            <label
+                              key={`save-${idx}-${row.text.slice(0, 24)}`}
+                              className="flex cursor-pointer gap-3 rounded-xl border border-border/70 bg-background px-3 py-3 shadow-sm transition-colors hover:border-emerald-500/35 has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-500/[0.08] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                            >
+                              <input
+                                type="checkbox"
+                                name="save_money_option"
+                                value={row.text}
+                                disabled={regenPending}
+                                className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-input accent-emerald-600"
+                              />
+                              <div className="min-w-0 flex-1 space-y-1.5 text-left">
+                                <span className="text-[15px] leading-snug text-foreground sm:text-sm">
+                                  <span className="font-semibold text-renovision-navy">{idx + 1}.</span> {row.text}
+                                </span>
+                                {impact ? (
+                                  <span className="inline-flex max-w-full rounded-full bg-emerald-600/12 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-emerald-900 dark:text-emerald-300">
+                                    {impact}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div
+                      className="space-y-3 rounded-2xl border border-amber-500/25 bg-gradient-to-b from-amber-500/[0.07] to-card p-4 shadow-sm sm:p-5"
+                      role="group"
+                      aria-label="Improve design suggestions"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-900 dark:text-amber-400">
+                          <Sparkles className="size-5" strokeWidth={2} aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-base font-semibold text-foreground">Improve design</p>
+                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                            Styling upgrades applied together in one pass. Same layout guardrails as above.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
+                          const impact = formatTweakImpactBand(row);
+                          return (
+                            <label
+                              key={`design-${idx}-${row.text.slice(0, 24)}`}
+                              className="flex cursor-pointer gap-3 rounded-xl border border-border/70 bg-background px-3 py-3 shadow-sm transition-colors hover:border-amber-500/35 has-[:checked]:border-amber-500/50 has-[:checked]:bg-amber-500/[0.08] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                            >
+                              <input
+                                type="checkbox"
+                                name="improve_design_option"
+                                value={row.text}
+                                disabled={regenPending}
+                                className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-input accent-amber-600"
+                              />
+                              <div className="min-w-0 flex-1 space-y-1.5 text-left">
+                                <span className="text-[15px] leading-snug text-foreground sm:text-sm">
+                                  <span className="font-semibold text-renovision-navy">{idx + 1}.</span> {row.text}
+                                </span>
+                                {impact ? (
+                                  <span className="inline-flex max-w-full rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-amber-950 dark:text-amber-300">
+                                    {impact}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-muted/25 p-4 sm:p-5">
+                    <Label htmlFor="try-custom-tweak" className="text-base font-semibold text-foreground sm:text-sm">
+                      Custom directions <span className="font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Textarea
+                      id="try-custom-tweak"
+                      name="custom_tweak"
+                      rows={4}
+                      maxLength={1200}
+                      disabled={regenPending}
+                      placeholder="e.g. Warmer paint, satin nickel hardware, larger floor tile look — no layout changes."
+                      className="mt-3 min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
+                    />
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Finishes only on what&apos;s already in the scene. Layout and fixture positions stay fixed. Custom
+                      text isn&apos;t auto-priced per line.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-3 border-t border-border/60 pt-5">
+                    <Button
+                      type="submit"
+                      disabled={regenPending}
+                      className="h-12 w-full rounded-xl text-base font-semibold shadow-md sm:h-11 sm:max-w-xs"
+                    >
+                      {regenPending ? "Updating preview…" : "Update preview"}
+                    </Button>
+                    <p className="text-center text-xs leading-relaxed text-muted-foreground sm:text-left">
+                      Choose at least one checkbox and/or add custom directions, then submit.
+                    </p>
+                  </div>
+                </form>
+                {regenState && "error" in regenState ? (
+                  <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {regenState.error}
+                  </p>
+                ) : null}
               </div>
-              {generation.reasoning.length > 0 ? (
-                <div className="mt-4 space-y-1">
-                  <p className="text-sm font-semibold">Why this price</p>
-                  {generation.reasoning.map((point, idx) => (
-                    <p key={`${idx}-${point}`} className="text-sm text-muted-foreground">
-                      • {point}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-              {generation.assumptions.length > 0 ? (
-                <div className="mt-3 space-y-1">
-                  <p className="text-sm font-semibold">Assumptions / risk factors</p>
-                  {generation.assumptions.map((point, idx) => (
-                    <p key={`${idx}-${point}`} className="text-sm text-muted-foreground">
-                      • {point}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-              <form action={regenAction} className="mt-4">
-                <input type="hidden" name="generation_id" value={generation.generationId} />
-                <input type="hidden" name="project_id" value={generation.projectId} />
-                <input type="hidden" name="selected_style" value={generation.selectedStyle} />
-                <input type="hidden" name="image_source" value="original" />
-                <Button type="submit" variant="outline" disabled={regenPending}>
-                  {regenPending ? "Regenerating..." : "Regenerate from photo"}
-                </Button>
-              </form>
-              {regenState && "error" in regenState ? (
-                <p className="mt-2 text-sm text-destructive">{regenState.error}</p>
-              ) : null}
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
-              <p className="text-lg font-semibold">Want to tweak the design?</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Suggestions come from the same before/after analysis as your estimate.{" "}
-                <span className="font-medium text-foreground">
-                  Update preview runs a new render from your current after image
-                </span>{" "}
-                (the version shown on the right), keeping the same room layout — not by restarting from the original
-                upload alone.
-              </p>
-              <form action={regenAction} className="mt-4 space-y-4">
-                <input type="hidden" name="generation_id" value={generation.generationId} />
-                <input type="hidden" name="project_id" value={generation.projectId} />
-                <input type="hidden" name="selected_style" value={generation.selectedStyle} />
-                <input type="hidden" name="image_source" value="current_mockup" />
-                <input type="hidden" name="source_mockup_id" value={generation.activeMockupId} />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-4">
-                    <p className="text-sm font-semibold text-foreground">Lower cost</p>
-                    <p className="text-xs text-muted-foreground">
-                      Check any ideas to bake in, add custom notes below, or both. Edits stay finish-only: same walls,
-                      openings, and fixture positions. Dollar tags are AI estimates vs your current range midpoint, not a
-                      bid.
-                    </p>
-                    <div className="space-y-2">
-                      {generation.saveMoneySuggestions.map((row, idx) => {
-                        const impact = formatTweakImpactBand(row);
-                        return (
-                        <label
-                          key={`save-${idx}-${row.text.slice(0, 24)}`}
-                          className="flex cursor-pointer gap-2 rounded-lg border border-transparent px-1 py-2 text-left hover:border-border/80 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                        >
-                          <input
-                            type="checkbox"
-                            name="save_money_option"
-                            value={row.text}
-                            disabled={regenPending}
-                            className="mt-0.5 size-4 shrink-0 rounded border-input"
-                          />
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                            <span className="text-sm leading-snug">
-                              <span className="font-medium text-renovision-navy">{idx + 1}. </span>
-                              {row.text}
-                            </span>
-                            {impact ? (
-                              <span className="shrink-0 text-xs font-medium tabular-nums text-emerald-800 dark:text-emerald-400">
-                                {impact}
-                              </span>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                      })}
-                    </div>
+            <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
+              <div className="relative bg-gradient-to-br from-renovision-navy-muted/35 via-card to-card px-4 pb-5 pt-5 sm:px-6 sm:pb-6 sm:pt-6">
+                <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-full bg-renovision-orange/[0.06] blur-2xl" aria-hidden />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-renovision-orange">
+                  Remodel estimate
+                </p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{generation.styleName}</p>
+                <p
+                  className="mt-3 font-bold tabular-nums tracking-tight text-renovision-navy"
+                  style={{ fontSize: "clamp(1.65rem, 5.5vw, 2.15rem)", lineHeight: 1.12 }}
+                >
+                  {usd.format(generation.estimateRange.min)}
+                  <span className="mx-1.5 font-semibold text-muted-foreground/80">–</span>
+                  {usd.format(generation.estimateRange.max)}
+                </p>
+                <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
+                  Planning-range ballpark from your photo and style — not a contractor bid.
+                </p>
+              </div>
+
+              <details className="group border-t border-border/70 bg-muted/20">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/35 sm:px-6 [&::-webkit-details-marker]:hidden">
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-semibold text-foreground">Breakdown &amp; details</p>
+                    <p className="text-xs text-muted-foreground">Materials, line items, notes, regenerate</p>
                   </div>
-                  <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-4">
-                    <p className="text-sm font-semibold text-foreground">Improve design</p>
-                    <p className="text-xs text-muted-foreground">
-                      Check finish and styling upgrades. All checked items are applied together in one pass. Dollar tags
-                      are rough add-on estimates vs midpoint, not a bid.
-                    </p>
-                    <div className="space-y-2">
-                      {generation.improveDesignSuggestions.map((row, idx) => {
-                        const impact = formatTweakImpactBand(row);
-                        return (
-                        <label
-                          key={`design-${idx}-${row.text.slice(0, 24)}`}
-                          className="flex cursor-pointer gap-2 rounded-lg border border-transparent px-1 py-2 text-left hover:border-border/80 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                        >
-                          <input
-                            type="checkbox"
-                            name="improve_design_option"
-                            value={row.text}
-                            disabled={regenPending}
-                            className="mt-0.5 size-4 shrink-0 rounded border-input"
-                          />
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                            <span className="text-sm leading-snug">
-                              <span className="font-medium text-renovision-navy">{idx + 1}. </span>
-                              {row.text}
-                            </span>
-                            {impact ? (
-                              <span className="shrink-0 text-xs font-medium tabular-nums text-amber-900 dark:text-amber-400">
-                                {impact}
-                              </span>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="try-custom-tweak" className="text-sm font-semibold text-foreground">
-                    Custom directions (optional)
-                  </Label>
-                  <Textarea
-                    id="try-custom-tweak"
-                    name="custom_tweak"
-                    rows={3}
-                    maxLength={1200}
-                    disabled={regenPending}
-                    placeholder="Example: warmer wall paint only, satin nickel hardware everywhere, slightly larger format floor tile look — no layout changes."
-                    className="min-h-[5.5rem] resize-y text-sm"
+                  <ChevronDown
+                    className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                    aria-hidden
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Same guardrails as the checkboxes: finishes and styling on what is already in the scene. Layout,
-                    fixture positions, and room shape stay fixed; the model is instructed to ignore incompatible asks.
-                    Custom text is not auto-priced per line.
+                </summary>
+                <div className="space-y-5 border-t border-border/60 bg-background/60 px-4 pb-5 pt-4 sm:px-6 sm:pb-6">
+                  <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Prompt profile:</span> {activePromptProfile}
                   </p>
-                </div>
-                <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <Button type="submit" disabled={regenPending}>
-                    {regenPending ? "Updating preview…" : "Update preview"}
-                  </Button>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Split</p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border border-border/70 bg-card px-3 py-2.5 text-center shadow-sm">
+                        <p className="text-[11px] font-medium text-muted-foreground">Materials</p>
+                        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+                          {usd.format(generation.breakdown.materials.min)}–{usd.format(generation.breakdown.materials.max)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-card px-3 py-2.5 text-center shadow-sm">
+                        <p className="text-[11px] font-medium text-muted-foreground">Labor</p>
+                        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+                          {usd.format(generation.breakdown.labor.min)}–{usd.format(generation.breakdown.labor.max)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-border/70 bg-card px-3 py-2.5 text-center shadow-sm">
+                        <p className="text-[11px] font-medium text-muted-foreground">Fixtures &amp; finishes</p>
+                        <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+                          {usd.format(generation.breakdown.fixtures.min)}–{usd.format(generation.breakdown.fixtures.max)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Pick suggestions and/or custom text (at least one), then submit.
+                    <span className="font-medium text-foreground">Confidence:</span> {generation.confidence}
                   </p>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-foreground">Line items</p>
+                    <div className="space-y-2 text-sm">
+                      {(generation.detailedBreakdown ?? []).map((item) => (
+                        <div
+                          key={`${item.category}-${item.min}-${item.max}`}
+                          className="rounded-xl border border-border/60 bg-card/80 p-3 shadow-sm"
+                        >
+                          <p className="font-medium text-foreground">
+                            {item.category}{" "}
+                            <span className="tabular-nums text-renovision-navy">
+                              {usd.format(item.min)}–{usd.format(item.max)}
+                            </span>
+                          </p>
+                          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{item.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {(generation.reasoning?.length ?? 0) > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Why this price</p>
+                      <ul className="space-y-1.5 text-sm text-muted-foreground">
+                        {(generation.reasoning ?? []).map((point, idx) => (
+                          <li key={`${idx}-${point}`} className="flex gap-2 leading-snug">
+                            <span className="mt-1.5 size-1 shrink-0 rounded-full bg-renovision-orange/70" aria-hidden />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {(generation.assumptions?.length ?? 0) > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Assumptions &amp; risks</p>
+                      <ul className="space-y-1.5 text-sm text-muted-foreground">
+                        {(generation.assumptions ?? []).map((point, idx) => (
+                          <li key={`${idx}-${point}`} className="flex gap-2 leading-snug">
+                            <span className="mt-1.5 size-1 shrink-0 rounded-full bg-renovision-teal/70" aria-hidden />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <form action={regenAction} className="flex flex-col gap-2 border-t border-border/50 pt-4">
+                    <input type="hidden" name="generation_id" value={generation.generationId} />
+                    <input type="hidden" name="project_id" value={generation.projectId} />
+                    <input type="hidden" name="selected_style" value={generation.selectedStyle} />
+                    <input type="hidden" name="image_source" value="original" />
+                    <Button type="submit" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={regenPending}>
+                      {regenPending ? "Regenerating..." : "Regenerate from photo"}
+                    </Button>
+                    {regenState && "error" in regenState ? (
+                      <p className="text-sm text-destructive">{regenState.error}</p>
+                    ) : null}
+                  </form>
                 </div>
-              </form>
-              {regenState && "error" in regenState ? (
-                <p className="mt-3 text-sm text-destructive">{regenState.error}</p>
-              ) : null}
+              </details>
             </div>
 
             <div className="sticky bottom-3 rounded-2xl border border-renovision-navy/20 bg-background p-4 shadow-lg">

@@ -1,6 +1,11 @@
+import Image from "next/image";
 import { Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+/** Served from `public/landing/` so production/CDN always has the assets (root `Images/` may not ship on all hosts). */
+const HERO_BEFORE_SRC = "/landing/before_main.jpg";
+const HERO_AFTER_SRC = "/landing/after_luxury.png";
 
 export function HeroMockupCard({ className }: { className?: string }) {
   return (
@@ -11,17 +16,30 @@ export function HeroMockupCard({ className }: { className?: string }) {
       )}
     >
       <div className="relative aspect-[4/3] w-full sm:aspect-[16/11]">
-        {/* Before / after placeholders */}
         <div className="absolute inset-0 grid grid-cols-2">
-          <div className="relative overflow-hidden bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(255,255,255,0.9),transparent_55%)]" />
-            <span className="absolute left-3 top-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground shadow-sm backdrop-blur">
+          <div className="relative overflow-hidden bg-muted">
+            <Image
+              src={HERO_BEFORE_SRC}
+              alt="Bathroom before remodel"
+              fill
+              className="object-cover object-center"
+              sizes="(max-width: 1024px) 45vw, 520px"
+              priority
+            />
+            <span className="absolute left-3 top-3 z-10 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground shadow-sm backdrop-blur">
               Before
             </span>
           </div>
-          <div className="relative overflow-hidden bg-gradient-to-br from-renovision-teal/25 via-sky-100/80 to-renovision-navy/15">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_30%,rgba(255,255,255,0.85),transparent_50%)]" />
-            <span className="absolute right-3 top-3 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-renovision-navy shadow-sm backdrop-blur">
+          <div className="relative overflow-hidden bg-muted">
+            <Image
+              src={HERO_AFTER_SRC}
+              alt="Bathroom after luxury style preview"
+              fill
+              className="object-cover object-center"
+              sizes="(max-width: 1024px) 45vw, 520px"
+              priority
+            />
+            <span className="absolute right-3 top-3 z-10 rounded-md bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-renovision-navy shadow-sm backdrop-blur">
               After
             </span>
           </div>
