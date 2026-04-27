@@ -8,6 +8,7 @@ import {
 import { truncateMockupTextPromptWithLayoutReinforcement } from "@/lib/ai/mockup-prompt-truncate";
 import { VERTEX_GEMINI_IMAGE_MODEL_ID } from "@/lib/ai/mockup-image-provider";
 import { loadVercelWorkloadIdentityGoogleAuthOptions } from "@/lib/ai/vercel-wif-vertex-auth";
+import { applyGcpServiceAccountJsonFromEnvIfNeeded } from "@/lib/integrations/gcp-service-account-json-bootstrap";
 import { productReferenceImageFetchCandidateUrls } from "@/lib/integrations/retail-product-image-lightbox";
 
 function serializeVertexClientError(err: unknown): string {
@@ -478,7 +479,21 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
   if (!projectId) {
     throw new Error("Vertex mockup: empty GOOGLE_CLOUD_PROJECT after trimming.");
   }
+  /** Vercel: instrumentation may not run before this lambda; JSON env is applied here too. */
+  applyGcpServiceAccountJsonFromEnvIfNeeded();
   const wifAuth = await loadVercelWorkloadIdentityGoogleAuthOptions();
+  if (
+    process.env.VERCEL &&
+    !wifAuth &&
+    !process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()
+  ) {
+    const hasJson = Boolean(process.env.GCP_SERVICE_ACCOUNT_JSON?.trim());
+    throw new Error(
+      hasJson
+        ? "Vertex: GCP_SERVICE_ACCOUNT_JSON is set but credentials were not applied (invalid JSON or file write failed — check function logs for [gcp-bootstrap])."
+        : "Vertex has no Google credentials on Vercel. Add GCP_SERVICE_ACCOUNT_JSON (full service account JSON) and GOOGLE_CLOUD_PROJECT, or configure Workload Identity (src/lib/ai/vercel-wif-vertex-auth.ts + https://vercel.com/docs/oidc/gcp).",
+    );
+  }
   const client = new GoogleGenAI({
     vertexai: true,
     project: projectId,
