@@ -228,6 +228,8 @@ export async function runHomeownerTryMockupGeneration(params: {
         scopeDescription: scopeForAi,
         beforeImageUrls: [beforeDataUrl],
         ...(additionalPrompt ? { additionalPrompt } : {}),
+        /** Faster OpenAI vision on first `/try` pass (low image detail + lower max_tokens). Set TRY_DISABLE_FAST_HOMEOWNER_VISION=1 to force high detail locally. */
+        homeownerTryFastVision: process.env.TRY_DISABLE_FAST_HOMEOWNER_VISION?.trim() !== "1",
       });
 
       const {

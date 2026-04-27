@@ -306,13 +306,13 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
     if (generatePending) {
       return {
         title: "Generating your first mockup…",
-        hint: "Typical wait: about 1–2 minutes.",
+        hint: "We analyze your photo, then render the room — often 1–3 minutes locally; Vertex can take longer on a cold start.",
       };
     }
     if (regenPending) {
       return {
         title: "Applying your tweak…",
-        hint: "Typical wait: about 1–2 minutes.",
+        hint: "Mostly image rendering — often 1–2 minutes; first call after idle can be slower.",
       };
     }
     if (versionPending) {
@@ -598,8 +598,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compare</p>
                   <p className="text-sm text-muted-foreground">
-                    Pick what is on the left (original or any mockup) and on the right (active mockup). Drag the slider
-                    to cross-fade.
+                    Choose the left image (original or any mockup) and the right mockup, then drag the slider on the
+                    photo to blend between them.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
@@ -623,42 +623,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                 <p className="text-sm text-destructive">{versionState.error}</p>
               ) : null}
               <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Side by side</p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
-                  <CompareBeforePicker
-                    idSuffix="split-left"
-                    mockupVersions={generation.mockupVersions}
-                    value={compareBeforeSelection}
-                    onChange={setCompareBeforeSelection}
-                    disabled={versionPending}
-                  />
-                  <MockupVersionPicker
-                    idSuffix="split"
-                    generation={generation}
-                    versionAction={versionAction}
-                    disabled={versionPending}
-                    label="Right (after)"
-                  />
-                </div>
-              </div>
-              <div className="grid gap-5 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Left</p>
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border/80 bg-muted">
-                    <Image src={beforeImageForCompare} alt="" fill className="object-cover" unoptimized />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Right</p>
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border/80 bg-muted">
-                    <Image src={afterImageForDisplay} alt="" fill className="object-cover" unoptimized />
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">

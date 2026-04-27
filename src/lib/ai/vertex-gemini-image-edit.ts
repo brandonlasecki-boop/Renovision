@@ -12,6 +12,20 @@ import { VERTEX_GEMINI_IMAGE_MODEL_ID } from "@/lib/ai/mockup-image-provider";
 import { loadVercelWorkloadIdentityGoogleAuthOptions } from "@/lib/ai/vercel-wif-vertex-auth";
 import { productReferenceImageFetchCandidateUrls } from "@/lib/integrations/retail-product-image-lightbox";
 
+/** One dynamic import + optional SA JSON file write per process (regen/tweak calls skip repeat work). */
+let gcpServiceAccountBootstrapPromise: Promise<void> | null = null;
+
+async function ensureGcpServiceAccountJsonFromEnvOnce(): Promise<void> {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) return;
+  if (!process.env.GCP_SERVICE_ACCOUNT_JSON?.trim()) return;
+  if (!gcpServiceAccountBootstrapPromise) {
+    gcpServiceAccountBootstrapPromise = import("@/lib/integrations/gcp-service-account-json-bootstrap").then((m) =>
+      m.applyGcpServiceAccountJsonFromEnvIfNeededAsync(),
+    );
+  }
+  await gcpServiceAccountBootstrapPromise;
+}
+
 function serializeVertexClientError(err: unknown): string {
   if (err instanceof Error) {
     const any = err as Error & {
@@ -481,10 +495,7 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
     throw new Error("Vertex mockup: empty GOOGLE_CLOUD_PROJECT after trimming.");
   }
   /** Vercel: instrumentation may not run before this lambda; JSON env is applied here too. */
-  const { applyGcpServiceAccountJsonFromEnvIfNeededAsync } = await import(
-    "@/lib/integrations/gcp-service-account-json-bootstrap"
-  );
-  await applyGcpServiceAccountJsonFromEnvIfNeededAsync();
+  await ensureGcpServiceAccountJsonFromEnvOnce();
   const wifAuth = await loadVercelWorkloadIdentityGoogleAuthOptions();
   if (
     process.env.VERCEL &&

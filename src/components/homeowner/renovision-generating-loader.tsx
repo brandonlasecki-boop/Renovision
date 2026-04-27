@@ -100,6 +100,27 @@ const BATHROOM_FACTS = [
   "Recessed medicine cabinets steal inches from the wall, not your elbow room in the room.",
   "Floor heat cables turn cold tile into a warm welcome — especially on winter mornings.",
   "Bidet seats: the bathroom’s unexpected glow-up for comfort and sustainability.",
+  "Dimmable vanity lights save relationships with your mirror — harsh overhead alone is a harsh critic.",
+  "Exhaust fans are rated in CFM: cubic feet per minute, aka how fast your mirror forgives a steamy shower.",
+  "Waterproofing behind tile is like insurance — invisible when right, unforgettable when skipped.",
+  "Subway tile never left; stack it vertically and it suddenly feels like a deliberate design flex.",
+  "Frameless glass looks effortless, but hinge pockets and plumb lines are doing quiet hero work.",
+  "A shower niche at elbow height beats a foot-level shelf when you’re actually using the shampoo.",
+  "Matte black fixtures photograph like a dream — plan a wipe-down rhythm so water spots don’t photobomb.",
+  "Curbless entries need the floor to think like a tiny watershed — slope is the unsung protagonist.",
+  "Undermount sinks read cleaner than drop-in rims — fewer edges for toothpaste archaeology.",
+  "Thermostatic shower valves keep temperature honest when someone flushes during your zen moment.",
+  "Large-format tile means fewer grout lines — fewer lines means faster cleaning and a calmer visual field.",
+  "Soundproofing around the tub helps — nobody needs the neighbor’s podcast as bath ambience.",
+  "A pocket door buys inches in tight baths; just remember the wall needs somewhere to swallow the slab.",
+  "Quartz vanity tops shrug at splashes; marble tells a story — sometimes a soap-ring novella.",
+  "ADA-friendly grab bars are now designed like jewelry — safety and style finally on speaking terms.",
+  "In-wall toilet tanks hide the tank and the noise — the float valve’s drama moves backstage.",
+  "Linear drains let you run big tiles through the shower floor — one fewer grout maze underfoot.",
+  "Steam showers need real enclosure and a dedicated drain — otherwise you’re just fogging a closet.",
+  "Color temperature consistency across vanity sconces beats one rogue blue LED ruining the vibe.",
+  "Motion-sensor night lights in the bath path are a small kindness for 2 a.m. half-asleep navigation.",
+  "If your vanity toe kick glows softly, you’ve unlocked a tiny luxury theater under the sink.",
 ];
 
 /** Seconds each “Did you know?” fact stays visible before rotating. */
@@ -334,12 +355,18 @@ export function RenovisionGeneratingLoader({
         <p className="mt-4 text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
 
-        <div
-          key={factIndex}
-          className="renovision-loader-fact mt-4 rounded-xl border border-renovision-orange/25 bg-renovision-orange-muted/60 px-4 py-3 text-left text-sm leading-snug text-renovision-navy"
-        >
-          <span className="text-xs font-bold uppercase tracking-wide text-renovision-orange">Did you know?</span>
-          <p className="mt-1.5 font-medium">{fact}</p>
+        <div className="renovision-loader-fact mt-4 rounded-xl border border-renovision-orange/25 bg-renovision-orange-muted/60 px-4 py-3 text-left text-sm leading-snug shadow-sm">
+          <span className="block text-xs font-bold uppercase tracking-wide text-renovision-orange">
+            Did you know?
+          </span>
+          <div className="relative mt-2 min-h-[3.75rem] overflow-hidden sm:min-h-[3.25rem]">
+            <p
+              key={factIndex}
+              className="renovision-loader-fact-text text-[15px] font-medium leading-relaxed text-renovision-navy sm:text-sm"
+            >
+              {fact}
+            </p>
+          </div>
         </div>
 
         <p className="mt-3 text-xs font-medium tabular-nums text-muted-foreground">

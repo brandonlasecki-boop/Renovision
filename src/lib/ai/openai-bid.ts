@@ -695,6 +695,11 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
   referenceImageUrls?: { label: string; url: string }[];
   /** Extra instructions: refinements, recommendations, what to emphasize in the mockup. */
   additionalPrompt?: string;
+  /**
+   * Homeowner `/try` first pass: use `detail: "low"` for job-site + ref images and a lower `max_tokens`
+   * cap so vision returns faster (still one full JSON). Contractor bids keep the default (high detail).
+   */
+  homeownerTryFastVision?: boolean;
 }): Promise<MaterialsAndVisionResult> {
   const {
     apiKey,
@@ -705,10 +710,21 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
     quoteLines,
     referenceImageUrls,
     additionalPrompt,
+    homeownerTryFastVision = false,
   } = params;
+
+  const visionDetail = homeownerTryFastVision ? ("low" as const) : ("high" as const);
 
   const afterUrls = afterMockupImageUrls.filter((u) => u.trim().length > 0).slice(0, 2);
   const hasAfterMockup = afterUrls.length > 0;
+
+  const visionMaxTokens = homeownerTryFastVision
+    ? hasAfterMockup
+      ? 6000
+      : 2800
+    : hasAfterMockup
+      ? 8192
+      : 4096;
 
   const additionalTrimForVision = additionalPrompt?.trim() ?? "";
   const additionalBlock =
@@ -777,7 +793,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
     hasAfterMockup || (referenceImageUrls?.length ?? 0) > 0 ? 4 : 6;
   const imageParts: VisionContent[] = beforeImageUrls.slice(0, beforeCap).map((url) => ({
     type: "image_url",
-    image_url: { url, detail: "high" },
+    image_url: { url, detail: visionDetail },
   }));
 
   const afterParts: VisionContent[] = [];
@@ -789,7 +805,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
     for (const url of afterUrls) {
       afterParts.push({
         type: "image_url",
-        image_url: { url, detail: "high" },
+        image_url: { url, detail: visionDetail },
       });
     }
   }
@@ -808,7 +824,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
       });
       refParts.push({
         type: "image_url",
-        image_url: { url: ref.url, detail: "high" },
+        image_url: { url: ref.url, detail: visionDetail },
       });
     }
   }
@@ -823,7 +839,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
     body: JSON.stringify({
       model: CHAT_MODEL,
       temperature: 0.15,
-      max_tokens: hasAfterMockup ? 8192 : 4096,
+      max_tokens: visionMaxTokens,
       messages: [
         {
           role: "user",
