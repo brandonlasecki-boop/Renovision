@@ -3,13 +3,84 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Primary clip is `public/looping_video2.mp4` (keep in sync with `Images/looping_video2.mp4`).
- * If that file uses a codec Windows / browsers do not decode (e.g. HEVC), run
- * `scripts/reencode-looping-video.ps1` after installing FFmpeg, then replace `public/looping_video2.mp4`.
+ * Prefer `public/renovision-looping-logo.webm`: VP9 WebM can carry alpha so the logo composites
+ * over the “before” photo without a green screen.
+ *
+ * **Do not chain H.264 MP4 here:** `renovision-looping-logo.mp4` uses a chroma-green plate; on
+ * production (Safari, CDN, or decode quirks) WebM can fail first and the MP4 fallback reads as a
+ * green rectangle because canvas chroma-keying is inconsistent across GPUs/browsers.
+ * If WebM fails, we go straight to the static PNG/wordmark fallback.
  */
-const LOADER_VIDEO_SRC_CHAIN = ["/looping_video2.mp4", "/renovision-looping-logo.mp4"] as const;
+const LOADER_VIDEO_SRC_CHAIN = ["/renovision-looping-logo.webm"] as const;
 
 const STATIC_LOGO_PNG_SRC = "/renovision-logo.png";
+
+/** Cap device pixel ratio for the keyed canvas (higher = sharper logo on HiDPI). */
+const LOADER_CANVAS_MAX_DPR = 3;
+
+/**
+ * Chroma pass at this scale when greater than 1, then scaled down with high-quality smoothing — softer edges, less blockiness.
+ * Total keyed pixels stay bounded by {@link LOADER_CHROMA_MAX_KEY_PIXELS}.
+ */
+const LOADER_CHROMA_SUPER_SAMPLE_MAX = 1.5;
+const LOADER_CHROMA_MAX_KEY_PIXELS = 1_150_000;
+
+function loaderCanvasDpr(): number {
+  if (typeof window === "undefined") return 1;
+  return Math.min(LOADER_CANVAS_MAX_DPR, window.devicePixelRatio || 1);
+}
+
+function chromaWorkScale(bw: number, bh: number): number {
+  const r = bw * bh;
+  if (r < 1) return 1;
+  let s = Math.min(LOADER_CHROMA_SUPER_SAMPLE_MAX, Math.sqrt(LOADER_CHROMA_MAX_KEY_PIXELS / r));
+  s = Math.max(1, s);
+  while (s > 1.01 && Math.floor(bw * s) * Math.floor(bh * s) > LOADER_CHROMA_MAX_KEY_PIXELS) {
+    s *= 0.96;
+  }
+  return s < 1.01 ? 1 : s;
+}
+
+/**
+ * Key baked-in chroma (#00ff00-style) from loader clips that were exported with a green plate.
+ * Only pixels where green clearly dominates red/blue are made transparent (with a soft edge).
+ */
+function chromaKeyedAlpha(r: number, g: number, b: number): number {
+  const maxRb = Math.max(r, b);
+  const excessGreen = g - maxRb;
+  // Avoid eating legitimate dark/near-neutral pixels.
+  if (g < 58) return 255;
+  if (excessGreen < 10) return 255;
+  const t0 = 10;
+  const t1 = 46;
+  const raw = Math.min(1, Math.max(0, (excessGreen - t0) / (t1 - t0)));
+  return Math.round(255 * (1 - raw));
+}
+
+function drawVideoContain(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  cw: number,
+  ch: number,
+) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (vw === 0 || vh === 0) return;
+  const scale = Math.min(cw / vw, ch / vh);
+  const dw = Math.round(vw * scale);
+  const dh = Math.round(vh * scale);
+  const ox = Math.round((cw - dw) / 2);
+  const oy = Math.round((ch - dh) / 2);
+  ctx.drawImage(video, 0, 0, vw, vh, ox, oy, dw, dh);
+}
+
+function applyGreenScreenToImageData(data: Uint8ClampedArray) {
+  for (let i = 0; i < data.length; i += 4) {
+    const a = chromaKeyedAlpha(data[i]!, data[i + 1]!, data[i + 2]!);
+    const srcA = data[i + 3]!;
+    data[i + 3] = Math.floor((srcA * a) / 255);
+  }
+}
 
 const BATHROOM_FACTS = [
   "Ancient Romans loved underfloor heating in baths — hypocausts were the original cozy floor.",
@@ -81,14 +152,17 @@ function RenovisionLoaderBrandStaticFallback() {
   );
 }
 
-/** Looping brand video with codec / file fallbacks, then static brand. */
+/** Looping brand video with chroma keyed on canvas (green plate removed), then static brand. */
 function RenovisionLoaderLoopingVideo() {
-  const ref = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
   const [chainIndex, setChainIndex] = useState(0);
   const [useStaticFallback, setUseStaticFallback] = useState(false);
 
   const tryPlay = useCallback(() => {
-    const el = ref.current;
+    const el = videoRef.current;
     if (!el || useStaticFallback) return;
     el.muted = true;
     void el.play().catch(() => {});
@@ -108,6 +182,85 @@ function RenovisionLoaderLoopingVideo() {
     });
   }, []);
 
+  useEffect(() => {
+    if (useStaticFallback) return;
+
+    const wrap = wrapRef.current;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !video || !canvas) return;
+
+    const ctx = canvas.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    const work = document.createElement("canvas");
+    const workCtx = work.getContext("2d", { alpha: true, willReadFrequently: true });
+    if (workCtx) {
+      workCtx.imageSmoothingEnabled = true;
+      workCtx.imageSmoothingQuality = "high";
+    }
+
+    const resize = () => {
+      const dpr = loaderCanvasDpr();
+      const { clientWidth: w, clientHeight: h } = wrap;
+      if (w < 2 || h < 2) return;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+    };
+
+    resize();
+    const ro = new ResizeObserver(() => resize());
+    ro.observe(wrap);
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      rafRef.current = requestAnimationFrame(tick);
+      const bw = canvas.width;
+      const bh = canvas.height;
+      if (bw < 2 || bh < 2 || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      const ss = chromaWorkScale(bw, bh);
+      if (workCtx && ss > 1.01) {
+        const pw = Math.max(1, Math.round(bw * ss));
+        const ph = Math.max(1, Math.round(bh * ss));
+        if (work.width !== pw || work.height !== ph) {
+          work.width = pw;
+          work.height = ph;
+        }
+        workCtx.clearRect(0, 0, pw, ph);
+        drawVideoContain(workCtx, video, pw, ph);
+        const imageData = workCtx.getImageData(0, 0, pw, ph);
+        applyGreenScreenToImageData(imageData.data);
+        workCtx.putImageData(imageData, 0, 0);
+        ctx.clearRect(0, 0, bw, bh);
+        ctx.drawImage(work, 0, 0, pw, ph, 0, 0, bw, bh);
+      } else {
+        ctx.clearRect(0, 0, bw, bh);
+        drawVideoContain(ctx, video, bw, bh);
+        const imageData = ctx.getImageData(0, 0, bw, bh);
+        applyGreenScreenToImageData(imageData.data);
+        ctx.putImageData(imageData, 0, 0);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [chainIndex, useStaticFallback]);
+
   if (useStaticFallback) {
     return <RenovisionLoaderBrandStaticFallback />;
   }
@@ -116,25 +269,28 @@ function RenovisionLoaderLoopingVideo() {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[3]" role="img" aria-label="Renovision">
-      {/*
-        Avoid flex + h-full on <video> (intrinsic height 0 until metadata). Center with transforms.
-      */}
-      <video
-        key={src}
-        ref={ref}
-        src={src}
-        className="absolute left-1/2 top-1/2 z-[3] min-h-[96px] w-[min(92%,17.5rem)] max-w-full -translate-x-1/2 -translate-y-1/2 object-contain object-center drop-shadow-[0_4px_20px_rgba(0,0,0,0.45)] sm:w-[min(90%,19rem)]"
-        style={{ maxHeight: "min(78%, 13.5rem)" }}
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="auto"
-        aria-hidden
-        onLoadedData={tryPlay}
-        onCanPlay={tryPlay}
-        onError={onVideoError}
-      />
+      <div ref={wrapRef} className="absolute inset-0 z-[3]">
+        <video
+          key={src}
+          ref={videoRef}
+          src={src}
+          className="absolute inset-0 z-0 h-full w-full object-contain object-center opacity-0"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden
+          onLoadedData={tryPlay}
+          onCanPlay={tryPlay}
+          onError={onVideoError}
+        />
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none absolute inset-0 z-[1] h-full w-full drop-shadow-[0_4px_20px_rgba(0,0,0,0.45)]"
+          aria-hidden
+        />
+      </div>
     </div>
   );
 }
@@ -156,7 +312,7 @@ export function RenovisionGeneratingLoader({
     <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-background/95 px-4 py-6">
       <div className="my-auto w-full max-w-md rounded-2xl border border-border/80 bg-card px-5 py-6 text-center shadow-xl sm:px-6">
         <div
-          className="renovision-loader-logo-frame relative mx-auto w-full max-w-[260px] overflow-hidden rounded-xl shadow-inner ring-1 ring-black/10 sm:max-w-[300px]"
+          className="renovision-loader-logo-frame relative mx-auto w-full max-w-[min(100%,320px)] overflow-hidden rounded-xl shadow-inner ring-1 ring-black/10 sm:max-w-[380px]"
           style={{ aspectRatio: "16 / 9" }}
         >
           {beforeSrc ? (
