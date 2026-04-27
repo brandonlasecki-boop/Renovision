@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Camera, ChevronDown, Images, PiggyBank, Sparkles } from "lucide-react";
+import { Camera, ChevronDown, Images } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -306,13 +306,13 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
     if (generatePending) {
       return {
         title: "Generating your first mockup…",
-        hint: "We analyze your photo, then render the room — often 1–3 minutes locally; Vertex can take longer on a cold start.",
+        hint: "This usually takes one to three minutes. Thanks for your patience.",
       };
     }
     if (regenPending) {
       return {
         title: "Applying your tweak…",
-        hint: "Mostly image rendering — often 1–2 minutes; first call after idle can be slower.",
+        hint: "Often about a minute or two.",
       };
     }
     if (versionPending) {
@@ -322,8 +322,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
       };
     }
     return {
-      title: "Creating your bathroom remodel with Vertex AI…",
-      hint: "Typical wait: about 1–2 minutes.",
+      title: "Creating your bathroom remodel…",
+      hint: "Often about one to two minutes.",
     };
   }, [generatePending, regenPending, versionPending]);
 
@@ -379,10 +379,16 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
 
       <div className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-6">
         <header className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">Renovision MVP</p>
-          <h1 className="text-balance text-3xl font-semibold tracking-tight">See your future bathroom instantly</h1>
-          <p className="text-sm text-muted-foreground">Choose a vibe, upload your bathroom, and get an AI mockup fast.</p>
-          <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
+          {step === "result" ? (
+            <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
+          ) : (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">Renovision MVP</p>
+              <h1 className="text-balance text-3xl font-semibold tracking-tight">See your future bathroom instantly</h1>
+              <p className="text-sm text-muted-foreground">Choose a vibe, upload your bathroom, and get an AI mockup fast.</p>
+              <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
+            </>
+          )}
         </header>
 
         {step === "style" ? (
@@ -594,16 +600,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
         {step === "result" && generation ? (
           <section className="space-y-6">
             <div className="space-y-2">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compare</p>
-                  <p className="text-sm text-muted-foreground">
-                    Choose the left image (original or any mockup) and the right mockup, then drag the slider on the
-                    photo to blend between them.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
-                  <CompareBeforePicker
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
+                <CompareBeforePicker
                     idSuffix="slider"
                     mockupVersions={generation.mockupVersions}
                     value={compareBeforeSelection}
@@ -618,7 +616,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                     label="Right (after)"
                   />
                 </div>
-              </div>
               {versionState && "error" in versionState ? (
                 <p className="text-sm text-destructive">{versionState.error}</p>
               ) : null}
@@ -626,19 +623,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
-              <div className="border-b border-border/60 bg-gradient-to-br from-renovision-navy-muted/45 via-card to-card px-4 py-5 sm:px-6 sm:py-6">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-renovision-orange">
-                  Refine your mockup
-                </p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tweak the design</h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Pick ideas below (and/or add your own notes).{" "}
-                  <span className="font-medium text-foreground">Update preview</span> reruns from your{" "}
-                  <strong className="font-semibold text-foreground">current after</strong> image — same room layout,
-                  finish-only edits. Dollar hints are AI ballparks, not a bid.
-                </p>
-              </div>
-
               <div className="p-4 sm:p-6">
                 <form action={regenAction} className="space-y-5 sm:space-y-6">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
@@ -653,17 +637,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                       role="group"
                       aria-label="Lower cost suggestions"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600/15 text-emerald-800 dark:text-emerald-400">
-                          <PiggyBank className="size-5" strokeWidth={2} aria-hidden />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-base font-semibold text-foreground">Lower cost</p>
-                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                            Finish swaps that lean cheaper. Same walls, openings, and fixture positions.
-                          </p>
-                        </div>
-                      </div>
                       <div className="space-y-2">
                         {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
                           const impact = formatTweakImpactBand(row);
@@ -700,17 +673,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                       role="group"
                       aria-label="Improve design suggestions"
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-900 dark:text-amber-400">
-                          <Sparkles className="size-5" strokeWidth={2} aria-hidden />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-base font-semibold text-foreground">Improve design</p>
-                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                            Styling upgrades applied together in one pass. Same layout guardrails as above.
-                          </p>
-                        </div>
-                      </div>
                       <div className="space-y-2">
                         {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
                           const impact = formatTweakImpactBand(row);
@@ -744,8 +706,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-muted/25 p-4 sm:p-5">
-                    <Label htmlFor="try-custom-tweak" className="text-base font-semibold text-foreground sm:text-sm">
-                      Custom directions <span className="font-normal text-muted-foreground">(optional)</span>
+                    <Label htmlFor="try-custom-tweak" className="sr-only">
+                      Custom directions (optional)
                     </Label>
                     <Textarea
                       id="try-custom-tweak"
@@ -753,13 +715,9 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                       rows={4}
                       maxLength={1200}
                       disabled={regenPending}
-                      placeholder="e.g. Warmer paint, satin nickel hardware, larger floor tile look — no layout changes."
-                      className="mt-3 min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
+                      placeholder=""
+                      className="min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
                     />
-                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      Finishes only on what&apos;s already in the scene. Layout and fixture positions stay fixed. Custom
-                      text isn&apos;t auto-priced per line.
-                    </p>
                   </div>
 
                   <div className="flex flex-col gap-3 border-t border-border/60 pt-5">
@@ -770,9 +728,6 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                     >
                       {regenPending ? "Updating preview…" : "Update preview"}
                     </Button>
-                    <p className="text-center text-xs leading-relaxed text-muted-foreground sm:text-left">
-                      Choose at least one checkbox and/or add custom directions, then submit.
-                    </p>
                   </div>
                 </form>
                 {regenState && "error" in regenState ? (
@@ -786,28 +741,20 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
               <div className="relative bg-gradient-to-br from-renovision-navy-muted/35 via-card to-card px-4 pb-5 pt-5 sm:px-6 sm:pb-6 sm:pt-6">
                 <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-full bg-renovision-orange/[0.06] blur-2xl" aria-hidden />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-renovision-orange">
-                  Remodel estimate
-                </p>
-                <p className="mt-2 text-sm font-semibold text-foreground">{generation.styleName}</p>
                 <p
-                  className="mt-3 font-bold tabular-nums tracking-tight text-renovision-navy"
+                  className="font-bold tabular-nums tracking-tight text-renovision-navy"
                   style={{ fontSize: "clamp(1.65rem, 5.5vw, 2.15rem)", lineHeight: 1.12 }}
                 >
                   {usd.format(generation.estimateRange.min)}
                   <span className="mx-1.5 font-semibold text-muted-foreground/80">–</span>
                   {usd.format(generation.estimateRange.max)}
                 </p>
-                <p className="mt-2 max-w-prose text-xs leading-relaxed text-muted-foreground">
-                  Planning-range ballpark from your photo and style — not a contractor bid.
-                </p>
               </div>
 
               <details className="group border-t border-border/70 bg-muted/20">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/35 sm:px-6 [&::-webkit-details-marker]:hidden">
                   <div className="min-w-0 text-left">
-                    <p className="text-sm font-semibold text-foreground">Breakdown &amp; details</p>
-                    <p className="text-xs text-muted-foreground">Materials, line items, notes, regenerate</p>
+                    <p className="text-sm font-semibold text-foreground">Breakdown</p>
                   </div>
                   <ChevronDown
                     className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
@@ -905,11 +852,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
               </details>
             </div>
 
-            <div className="sticky bottom-3 rounded-2xl border border-renovision-navy/20 bg-background p-4 shadow-lg">
+            <div className="rounded-2xl border border-renovision-navy/20 bg-background p-4 shadow-lg">
               <p className="text-lg font-semibold">Want a contractor to quote this remodel?</p>
-              <p className="text-sm text-muted-foreground">
-                Share your project details and we&apos;ll help connect you with remodelers who can bring this design to life.
-              </p>
               <form action={connectAction} className="mt-3">
                 <input type="hidden" name="generation_id" value={generation.generationId} />
                 <input type="hidden" name="project_id" value={generation.projectId} />

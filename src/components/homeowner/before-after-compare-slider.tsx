@@ -11,6 +11,7 @@ type BeforeAfterCompareSliderProps = {
 /**
  * Full-width before/after: drag on the image or use the range control to reveal the remodel (after)
  * under the original (before). Pointer capture supports one-finger drag on phones.
+ * Below the range control, side-by-side thumbnails show full before and after (clear on narrow screens).
  */
 export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCompareSliderProps) {
   const [pct, setPct] = useState(50);
@@ -43,7 +44,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div
         ref={trackRef}
         className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm"
@@ -103,10 +104,41 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           max={100}
           value={pct}
           onChange={(e) => setPct(Number(e.target.value))}
-          className="h-2 flex-1 cursor-ew-resize accent-renovision-orange"
+          className="h-2 min-w-0 flex-1 cursor-ew-resize accent-renovision-orange"
           aria-label="Slide to compare before and after"
         />
         <span className="text-xs text-muted-foreground">After</span>
+      </div>
+      {/* Full before/after previews (especially helpful on small screens where the slider is one blended view). */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
+          <Image
+            src={beforeUrl}
+            alt="Before — full preview"
+            fill
+            className="object-cover"
+            sizes="(max-width: 640px) 45vw, 400px"
+            unoptimized
+            draggable={false}
+          />
+          <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            Before
+          </figcaption>
+        </figure>
+        <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
+          <Image
+            src={afterUrl}
+            alt="After — full preview"
+            fill
+            className="object-cover"
+            sizes="(max-width: 640px) 45vw, 400px"
+            unoptimized
+            draggable={false}
+          />
+          <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            After
+          </figcaption>
+        </figure>
       </div>
     </div>
   );

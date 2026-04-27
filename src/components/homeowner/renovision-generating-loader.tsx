@@ -124,7 +124,7 @@ const BATHROOM_FACTS = [
 ];
 
 /** Seconds each “Did you know?” fact stays visible before rotating. */
-const FACT_DISPLAY_INTERVAL_SEC = 7;
+const FACT_DISPLAY_INTERVAL_SEC = 8;
 
 export type RenovisionGeneratingLoaderProps = {
   title: string;
@@ -326,8 +326,27 @@ export function RenovisionGeneratingLoader({
   const fact = BATHROOM_FACTS[factIndex];
   const beforeSrc = beforeImageUrl?.trim() ?? "";
 
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlOverscroll = html.style.overscrollBehavior;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.overscrollBehavior = prevHtmlOverscroll;
+      body.style.overscrollBehavior = prevBodyOverscroll;
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-background/95 px-4 py-6">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto overscroll-contain bg-background/50 px-4 py-6 backdrop-blur-xl backdrop-saturate-150">
       <div className="my-auto w-full max-w-md rounded-2xl border border-border/80 bg-card px-5 py-6 text-center shadow-xl sm:px-6">
         <div
           className="renovision-loader-logo-frame relative mx-auto w-full max-w-[min(100%,320px)] overflow-hidden rounded-xl shadow-inner ring-1 ring-black/10 sm:max-w-[380px]"
@@ -371,6 +390,9 @@ export function RenovisionGeneratingLoader({
 
         <p className="mt-3 text-xs font-medium tabular-nums text-muted-foreground">
           Elapsed {Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, "0")}
+        </p>
+        <p className="mt-2.5 max-w-[280px] text-center text-[11px] leading-snug text-muted-foreground">
+          Keep this page open until we&apos;re done. Navigating away may interrupt your design.
         </p>
       </div>
     </div>
