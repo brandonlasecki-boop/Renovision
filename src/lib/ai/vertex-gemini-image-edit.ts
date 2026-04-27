@@ -7,6 +7,7 @@ import {
 } from "@google/genai";
 import { truncateMockupTextPromptWithLayoutReinforcement } from "@/lib/ai/mockup-prompt-truncate";
 import { VERTEX_GEMINI_IMAGE_MODEL_ID } from "@/lib/ai/mockup-image-provider";
+import { loadVercelWorkloadIdentityGoogleAuthOptions } from "@/lib/ai/vercel-wif-vertex-auth";
 import { productReferenceImageFetchCandidateUrls } from "@/lib/integrations/retail-product-image-lightbox";
 
 function serializeVertexClientError(err: unknown): string {
@@ -477,10 +478,12 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
   if (!projectId) {
     throw new Error("Vertex mockup: empty GOOGLE_CLOUD_PROJECT after trimming.");
   }
+  const wifAuth = await loadVercelWorkloadIdentityGoogleAuthOptions();
   const client = new GoogleGenAI({
     vertexai: true,
     project: projectId,
     location: params.location,
+    ...(wifAuth ? { googleAuthOptions: wifAuth } : {}),
   });
 
   const built = buildVertexRemodelMockupRequestParts({

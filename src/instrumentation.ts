@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 
 /**
  * Vercel / other hosts have no `gcloud auth application-default login`.
- * If you set `GCP_SERVICE_ACCOUNT_JSON` to the **full service account JSON** (same as the key file
- * Google lets you download), we write it to a temp file and point `GOOGLE_APPLICATION_CREDENTIALS`
- * there so `@google/genai` + Vertex can use ADC-style auth.
+ * If org policy **blocks** SA keys, use Workload Identity Federation env vars instead (see
+ * `src/lib/ai/vercel-wif-vertex-auth.ts` + https://vercel.com/docs/oidc/gcp ).
  *
- * Do not set this in the browser — server-only. Prefer disabling SA keys in org policy + WIF when you can.
+ * If you **can** use a downloaded key JSON, set `GCP_SERVICE_ACCOUNT_JSON` to the full file contents;
+ * we write it under the OS temp dir and set `GOOGLE_APPLICATION_CREDENTIALS` for ADC-style auth.
+ * Server-only; never commit secrets.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
