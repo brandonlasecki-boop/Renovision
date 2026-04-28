@@ -7,6 +7,7 @@ import {
   fetchRenovisionAdminFunnel,
   fetchRecentAttributionRows,
   fetchRenovisionSessionDrilldown,
+  fetchRenovisionAdminLeadsTable,
   fetchRenovisionAdminOverview,
   fetchRenovisionAdminProjectsTable,
   fetchRenovisionAdminMockupsTable,
@@ -105,6 +106,7 @@ export default async function RenovisionAdminPage({
   let mockups: Awaited<ReturnType<typeof fetchRenovisionAdminMockupsTable>> = [];
   let attributionRows: Awaited<ReturnType<typeof fetchRecentAttributionRows>> = [];
   let sessionDrilldown: Awaited<ReturnType<typeof fetchRenovisionSessionDrilldown>> = null;
+  let leads: Awaited<ReturnType<typeof fetchRenovisionAdminLeadsTable>> = [];
 
   try {
     [
@@ -119,6 +121,7 @@ export default async function RenovisionAdminPage({
       mockups,
       attributionRows,
       sessionDrilldown,
+      leads,
     ] = await Promise.all([
       fetchRenovisionAdminOverview(range),
       fetchRenovisionAdminTrends(range),
@@ -131,6 +134,7 @@ export default async function RenovisionAdminPage({
       fetchRenovisionAdminMockupsTable(range, q),
       fetchRecentAttributionRows(120),
       sessionQuery ? fetchRenovisionSessionDrilldown(sessionQuery) : Promise.resolve(null),
+      fetchRenovisionAdminLeadsTable(range, q),
     ]);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Renovision analytics.";
@@ -216,7 +220,7 @@ export default async function RenovisionAdminPage({
               value={overview.totalSignedInMockups}
               hint="All mockups on saved-to-account projects"
             />
-            <MetricCard title="Remodeler requests" value={overview.totalRemodelerRequests} />
+            <MetricCard title="Connect Me leads" value={overview.totalRemodelerRequests} />
             <MetricCard
               title="Guest → signup"
               value={pctLabel(overview.conversionAnonymousToSignup)}
@@ -228,7 +232,7 @@ export default async function RenovisionAdminPage({
               hint={`${overview.totalInitialGenerations} first previews / ${overview.totalAnonymousSessions} sessions`}
             />
             <MetricCard
-              title="Signup → remodeler ask"
+              title="Signup → lead submit"
               value={pctLabel(overview.conversionSignupToRemodeler)}
               hint="Requests in range / signups in range (or all accounts when all-time)"
             />
@@ -255,7 +259,7 @@ export default async function RenovisionAdminPage({
                 <TrendBars points={trends} keyField="signups" colorClass="bg-foreground/70" />
               </div>
               <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Remodeler requests</p>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Connect Me leads</p>
                 <TrendBars points={trends} keyField="remodelerRequests" colorClass="bg-violet-500/75" />
               </div>
             </div>
@@ -538,7 +542,7 @@ export default async function RenovisionAdminPage({
                     <th className="px-4 py-2 font-medium">Projects</th>
                     <th className="px-4 py-2 font-medium">First</th>
                     <th className="px-4 py-2 font-medium">Refines</th>
-                    <th className="px-4 py-2 font-medium">Remodeler</th>
+                    <th className="px-4 py-2 font-medium">Lead submitted</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -624,7 +628,7 @@ export default async function RenovisionAdminPage({
                     <th className="px-4 py-2 font-medium">Total</th>
                     <th className="px-4 py-2 font-medium">First</th>
                     <th className="px-4 py-2 font-medium">Refines</th>
-                    <th className="px-4 py-2 font-medium">Remodeler</th>
+                    <th className="px-4 py-2 font-medium">Lead submitted</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -696,6 +700,58 @@ export default async function RenovisionAdminPage({
                         <td className="px-4 py-2">{m.ownerType}</td>
                         <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs text-muted-foreground">
                           {m.ownerId ?? "—"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
+              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
+                Connect Me lead requests
+              </h3>
+              <table className="w-full min-w-[1200px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    <th className="px-4 py-2 font-medium">Created</th>
+                    <th className="px-4 py-2 font-medium">Name</th>
+                    <th className="px-4 py-2 font-medium">Email</th>
+                    <th className="px-4 py-2 font-medium">Phone</th>
+                    <th className="px-4 py-2 font-medium">ZIP</th>
+                    <th className="px-4 py-2 font-medium">Timeline</th>
+                    <th className="px-4 py-2 font-medium">Budget</th>
+                    <th className="px-4 py-2 font-medium">Style</th>
+                    <th className="px-4 py-2 font-medium">Estimate</th>
+                    <th className="px-4 py-2 font-medium">Project</th>
+                    <th className="px-4 py-2 font-medium">Generation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-6 text-muted-foreground">
+                        No lead requests found.
+                      </td>
+                    </tr>
+                  ) : (
+                    leads.map((l) => (
+                      <tr key={l.leadId} className="border-b border-border/40 last:border-0">
+                        <td className="px-4 py-2 text-xs text-muted-foreground">{new Date(l.createdAt).toLocaleString()}</td>
+                        <td className="px-4 py-2">{l.name}</td>
+                        <td className="px-4 py-2">{l.email}</td>
+                        <td className="px-4 py-2">{l.phone}</td>
+                        <td className="px-4 py-2">{l.zipCode}</td>
+                        <td className="px-4 py-2">{l.timeline}</td>
+                        <td className="px-4 py-2">{l.budgetRange}</td>
+                        <td className="px-4 py-2">{l.selectedStyle}</td>
+                        <td className="px-4 py-2 tabular-nums">${l.estimateMin}–${l.estimateMax}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                          {l.projectId ? `${l.projectId.slice(0, 8)}…` : "—"}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+                          {l.generationId ? `${l.generationId.slice(0, 8)}…` : "—"}
                         </td>
                       </tr>
                     ))

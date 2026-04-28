@@ -143,6 +143,22 @@ export type RenovisionAdminMockupRow = {
   ownerId: string | null;
 };
 
+export type RenovisionAdminLeadRow = {
+  leadId: string;
+  createdAt: string;
+  generationId: string | null;
+  projectId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  zipCode: string;
+  timeline: string;
+  budgetRange: string;
+  selectedStyle: string;
+  estimateMin: number;
+  estimateMax: number;
+};
+
 export type RenovisionAttributionAdminRow = {
   id: string;
   createdAt: string;
@@ -246,7 +262,7 @@ export async function fetchRenovisionAdminOverview(range: RenovisionAdminRange):
     countRows("renovision_anonymous_sessions", { fromIso }),
     countRows("profiles", { fromIso: null }),
     countRows("profiles", { fromIso }),
-    countRows("renovision_remodeler_requests", { fromIso }),
+    countRows("leads", { fromIso }),
     (async () => {
       let q = svc
         .from("homeowner_try_projects")
@@ -351,7 +367,7 @@ export async function fetchRenovisionAdminTrends(range: RenovisionAdminRange): P
         .gte("created_at", monthStart.toISOString())
         .lt("created_at", next.toISOString());
       const { data: reqs } = await svc
-        .from("renovision_remodeler_requests")
+        .from("leads")
         .select("id")
         .gte("created_at", monthStart.toISOString())
         .lt("created_at", next.toISOString());
@@ -392,7 +408,7 @@ export async function fetchRenovisionAdminTrends(range: RenovisionAdminRange): P
       .gte("created_at", day.toISOString())
       .lt("created_at", next.toISOString());
     const { data: reqs } = await svc
-      .from("renovision_remodeler_requests")
+        .from("leads")
       .select("id")
       .gte("created_at", day.toISOString())
       .lt("created_at", next.toISOString());
@@ -418,7 +434,7 @@ export async function fetchRenovisionAdminFunnel(range: RenovisionAdminRange): P
     { id: "signups", label: "New accounts (in range)", count: o.totalSignupsInRange },
     {
       id: "remodeler",
-      label: "Remodeler interest requests",
+      label: "Connect Me lead submissions",
       count: o.totalRemodelerRequests,
     },
   ];
@@ -526,12 +542,26 @@ export async function fetchRenovisionAdminUsersTable(
     mockupsByUser.set(uid, cur);
   }
 
-  const { data: reqRows } = await svc.from("renovision_remodeler_requests").select("user_id, created_at");
+  const { data: generationRows } = await svc.from("bathroom_generations").select("id, project_id, created_at");
+  const generationIds = [...new Set((generationRows ?? []).map((g) => String(g.id)))];
+  const { data: leadRows } = generationIds.length
+    ? await svc.from("leads").select("generation_id, created_at")
+    : { data: [] };
+  const projectByGeneration = new Map(
+    (generationRows ?? []).map((g) => [String(g.id), String(g.project_id ?? "")]),
+  );
+  const { data: projRowsForLeadUsers } = await svc.from("homeowner_try_projects").select("id, user_id");
+  const userByProjectForLeads = new Map(
+    (projRowsForLeadUsers ?? []).map((p) => [String(p.id), (p.user_id as string | null) ?? null]),
+  );
   const remodelerByUser = new Set<string>();
-  for (const r of reqRows ?? []) {
-    if (!r.user_id) continue;
+  for (const r of leadRows ?? []) {
     if (fromIso && String(r.created_at) < fromIso) continue;
-    remodelerByUser.add(String(r.user_id));
+    const projectId = projectByGeneration.get(String(r.generation_id ?? ""));
+    if (!projectId) continue;
+    const userId = userByProjectForLeads.get(projectId);
+    if (!userId) continue;
+    remodelerByUser.add(userId);
   }
 
   const { data: authData, error: authErr } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -624,9 +654,13 @@ export async function fetchRenovisionAdminProjectsTable(
     mockAgg.set(pid, cur);
   }
 
-  const { data: reqRows } = await svc.from("renovision_remodeler_requests").select("project_id");
+  const { data: reqRows } = await svc.from("leads").select("generation_id");
+  const { data: genRows } = await svc.from("bathroom_generations").select("id, project_id");
+  const projectByGeneration = new Map((genRows ?? []).map((g) => [String(g.id), String(g.project_id ?? "")]));
   const remodelerProjects = new Set(
-    (reqRows ?? []).filter((r) => r.project_id).map((r) => String(r.project_id)),
+    (reqRows ?? [])
+      .map((r) => projectByGeneration.get(String(r.generation_id ?? "")) ?? "")
+      .filter(Boolean),
   );
 
   const sq = search.trim().toLowerCase();
@@ -930,4 +964,56 @@ export async function fetchRenovisionSessionDrilldown(
       imageUrl: signedMockupById.get(String(m.id)) ?? null,
     })),
   };
+}
+
+export async function fetchRenovisionAdminLeadsTable(
+  range: RenovisionAdminRange,
+  search: string,
+): Promise<RenovisionAdminLeadRow[]> {
+  const svc = createServiceClient();
+  const fromIso = rangeLowerBoundIso(range);
+  let q = svc
+    .from("leads")
+    .select(
+      "id, created_at, generation_id, name, email, phone, zip_code, timeline, budget_range, selected_style, estimate_min, estimate_max",
+    )
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (fromIso) q = q.gte("created_at", fromIso);
+  const { data: leads, error } = await q;
+  if (error) throw new Error(error.message);
+
+  const generationIds = [...new Set((leads ?? []).map((l) => String(l.generation_id ?? "")).filter(Boolean))];
+  const { data: generations, error: gErr } = generationIds.length
+    ? await svc.from("bathroom_generations").select("id, project_id").in("id", generationIds)
+    : { data: [], error: null };
+  if (gErr) throw new Error(gErr.message);
+  const projectByGeneration = new Map((generations ?? []).map((g) => [String(g.id), String(g.project_id ?? "")]));
+
+  const rows: RenovisionAdminLeadRow[] = (leads ?? []).map((l) => ({
+    leadId: String(l.id),
+    createdAt: String(l.created_at),
+    generationId: (l.generation_id as string | null) ?? null,
+    projectId: projectByGeneration.get(String(l.generation_id ?? "")) ?? null,
+    name: String(l.name ?? ""),
+    email: String(l.email ?? ""),
+    phone: String(l.phone ?? ""),
+    zipCode: String(l.zip_code ?? ""),
+    timeline: String(l.timeline ?? ""),
+    budgetRange: String(l.budget_range ?? ""),
+    selectedStyle: String(l.selected_style ?? ""),
+    estimateMin: Number(l.estimate_min ?? 0),
+    estimateMax: Number(l.estimate_max ?? 0),
+  }));
+
+  const sq = search.trim().toLowerCase();
+  if (!sq) return rows;
+  return rows.filter(
+    (r) =>
+      r.leadId.toLowerCase().includes(sq) ||
+      r.email.toLowerCase().includes(sq) ||
+      r.name.toLowerCase().includes(sq) ||
+      (r.projectId ?? "").toLowerCase().includes(sq) ||
+      (r.generationId ?? "").toLowerCase().includes(sq),
+  );
 }

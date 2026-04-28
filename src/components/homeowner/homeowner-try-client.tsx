@@ -1068,10 +1068,20 @@ export function HomeownerTryClient({
         ) : null}
 
         {leadOpen && generation ? (
-          <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
-            <p className="text-xl font-semibold">Project details</p>
-            {!leadSubmitted ? (
-              <form action={leadAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/45 p-4 sm:items-center">
+            <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border/80 bg-card p-5 shadow-xl">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-xl font-semibold">Project details</p>
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                  onClick={() => setLeadOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+              {!leadSubmitted ? (
+                <form action={leadAction} className="mt-4 grid gap-3 sm:grid-cols-2">
                 <input type="hidden" name="generation_id" value={generation.generationId} />
                 <input type="hidden" name="project_id" value={generation.projectId} />
                 <input type="hidden" name="selected_style" value={generation.styleName} />
@@ -1157,13 +1167,19 @@ export function HomeownerTryClient({
                     {leadPending ? "Submitting…" : "Submit"}
                   </Button>
                 </div>
-              </form>
-            ) : (
-              <p className="mt-2 text-sm font-medium text-renovision-teal">
-                Thanks. Your details were submitted and we&apos;ll connect you with remodelers.
-              </p>
-            )}
-          </section>
+                </form>
+              ) : (
+                <div className="mt-2 space-y-3">
+                  <p className="text-sm font-medium text-renovision-teal">
+                    Thanks. Your details were submitted and we&apos;ll connect you with remodelers.
+                  </p>
+                  <Button type="button" variant="outline" className="rounded-xl" onClick={() => setLeadOpen(false)}>
+                    Done
+                  </Button>
+                </div>
+              )}
+            </section>
+          </div>
         ) : null}
       </div>
 
