@@ -34,3 +34,13 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Renovision Attribution Links
+
+Use query params on landing links to attribute social traffic through the Renovision flow:
+
+- TikTok video 1: `https://YOURDOMAIN.com/?platform=tiktok&campaign=launch&video=001`
+- Instagram version: `https://YOURDOMAIN.com/?platform=instagram&campaign=launch&video=001`
+- YouTube Shorts version: `https://YOURDOMAIN.com/?platform=youtube&campaign=launch&video=001`
+
+Supported params: `src`, `source`, `platform`, `campaign`, `video`, `v`.

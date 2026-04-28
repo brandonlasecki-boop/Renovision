@@ -5,6 +5,7 @@ import {
   fetchRenovisionActiveSessions,
   fetchRenovisionAdminAnonSessionsTable,
   fetchRenovisionAdminFunnel,
+  fetchRecentAttributionRows,
   fetchRenovisionAdminOverview,
   fetchRenovisionAdminProjectsTable,
   fetchRenovisionAdminMockupsTable,
@@ -100,6 +101,7 @@ export default async function RenovisionAdminPage({
   let sessions: Awaited<ReturnType<typeof fetchRenovisionAdminAnonSessionsTable>> = [];
   let projects: Awaited<ReturnType<typeof fetchRenovisionAdminProjectsTable>> = [];
   let mockups: Awaited<ReturnType<typeof fetchRenovisionAdminMockupsTable>> = [];
+  let attributionRows: Awaited<ReturnType<typeof fetchRecentAttributionRows>> = [];
 
   try {
     [
@@ -111,6 +113,8 @@ export default async function RenovisionAdminPage({
       users,
       sessions,
       projects,
+      mockups,
+      attributionRows,
     ] = await Promise.all([
       fetchRenovisionAdminOverview(range),
       fetchRenovisionAdminTrends(range),
@@ -121,6 +125,7 @@ export default async function RenovisionAdminPage({
       fetchRenovisionAdminAnonSessionsTable(range, q),
       fetchRenovisionAdminProjectsTable(range, q),
       fetchRenovisionAdminMockupsTable(range, q),
+      fetchRecentAttributionRows(120),
     ]);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Renovision analytics.";
@@ -489,6 +494,50 @@ export default async function RenovisionAdminPage({
                         <td className="px-4 py-2">{m.ownerType}</td>
                         <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs text-muted-foreground">
                           {m.ownerId ?? "—"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
+              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
+                Attribution (generated, saved, leads)
+              </h3>
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    <th className="px-4 py-2 font-medium">Created</th>
+                    <th className="px-4 py-2 font-medium">Type</th>
+                    <th className="px-4 py-2 font-medium">Source</th>
+                    <th className="px-4 py-2 font-medium">Platform</th>
+                    <th className="px-4 py-2 font-medium">Campaign</th>
+                    <th className="px-4 py-2 font-medium">Video</th>
+                    <th className="px-4 py-2 font-medium">Record</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attributionRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-6 text-muted-foreground">
+                        No attribution rows found.
+                      </td>
+                    </tr>
+                  ) : (
+                    attributionRows.map((row) => (
+                      <tr key={`${row.kind}-${row.id}`} className="border-b border-border/40 last:border-0">
+                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                          {new Date(row.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-2">{row.kind}</td>
+                        <td className="px-4 py-2">{row.source}</td>
+                        <td className="px-4 py-2">{row.platform}</td>
+                        <td className="px-4 py-2">{row.campaign}</td>
+                        <td className="px-4 py-2">{row.video}</td>
+                        <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs text-muted-foreground">
+                          {row.id}
                         </td>
                       </tr>
                     ))

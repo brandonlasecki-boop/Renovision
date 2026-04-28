@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { sanitizeAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
 
 export type RenovisionAdminRange = "7d" | "30d" | "all";
 
@@ -139,6 +140,16 @@ export type RenovisionAdminMockupRow = {
   generationNumber: number;
   ownerType: "user" | "guest" | "unknown";
   ownerId: string | null;
+};
+
+export type RenovisionAttributionAdminRow = {
+  id: string;
+  createdAt: string;
+  kind: "generation" | "saved_project" | "lead";
+  source: string;
+  platform: string;
+  campaign: string;
+  video: string;
 };
 
 async function countRows(
@@ -673,4 +684,73 @@ export async function fetchRenovisionAdminMockupsTable(
       r.projectId.toLowerCase().includes(sq) ||
       (r.ownerId && r.ownerId.toLowerCase().includes(sq)),
   );
+}
+
+function attributionField(a: RenovisionAttribution | null, key: "source" | "src" | "platform" | "campaign" | "video" | "v"): string {
+  const v = a?.[key];
+  return typeof v === "string" && v.trim() ? v : "—";
+}
+
+export async function fetchRecentAttributionRows(limit = 100): Promise<RenovisionAttributionAdminRow[]> {
+  const svc = createServiceClient();
+  const [generationsRes, savedRes, leadsRes] = await Promise.all([
+    svc
+      .from("bathroom_generations")
+      .select("id, created_at, attribution")
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    svc
+      .from("renovision_saved_projects")
+      .select("id, created_at, attribution")
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    svc
+      .from("leads")
+      .select("id, created_at, attribution")
+      .order("created_at", { ascending: false })
+      .limit(limit),
+  ]);
+  if (generationsRes.error) throw new Error(generationsRes.error.message);
+  if (savedRes.error) throw new Error(savedRes.error.message);
+  if (leadsRes.error) throw new Error(leadsRes.error.message);
+
+  const rows: RenovisionAttributionAdminRow[] = [];
+  for (const row of generationsRes.data ?? []) {
+    const a = sanitizeAttribution((row as { attribution?: unknown }).attribution ?? null);
+    rows.push({
+      id: String(row.id),
+      createdAt: String(row.created_at),
+      kind: "generation",
+      source: attributionField(a, "source") !== "—" ? attributionField(a, "source") : attributionField(a, "src"),
+      platform: attributionField(a, "platform"),
+      campaign: attributionField(a, "campaign"),
+      video: attributionField(a, "video") !== "—" ? attributionField(a, "video") : attributionField(a, "v"),
+    });
+  }
+  for (const row of savedRes.data ?? []) {
+    const a = sanitizeAttribution((row as { attribution?: unknown }).attribution ?? null);
+    rows.push({
+      id: String(row.id),
+      createdAt: String(row.created_at),
+      kind: "saved_project",
+      source: attributionField(a, "source") !== "—" ? attributionField(a, "source") : attributionField(a, "src"),
+      platform: attributionField(a, "platform"),
+      campaign: attributionField(a, "campaign"),
+      video: attributionField(a, "video") !== "—" ? attributionField(a, "video") : attributionField(a, "v"),
+    });
+  }
+  for (const row of leadsRes.data ?? []) {
+    const a = sanitizeAttribution((row as { attribution?: unknown }).attribution ?? null);
+    rows.push({
+      id: String(row.id),
+      createdAt: String(row.created_at),
+      kind: "lead",
+      source: attributionField(a, "source") !== "—" ? attributionField(a, "source") : attributionField(a, "src"),
+      platform: attributionField(a, "platform"),
+      campaign: attributionField(a, "campaign"),
+      video: attributionField(a, "video") !== "—" ? attributionField(a, "video") : attributionField(a, "v"),
+    });
+  }
+
+  return rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, limit);
 }

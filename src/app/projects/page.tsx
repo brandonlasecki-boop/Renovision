@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listViewerSavedProjects } from "@/lib/data/renovision-saved-projects";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -58,17 +58,18 @@ export default async function MyProjectsPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button asChild variant="outline">
-                      <Link href={`/projects/${p.id}`}>View Project</Link>
-                    </Button>
-                    <Button asChild variant="outline">
-                      <Link href={`/try?restore_generation_id=${encodeURIComponent(p.generationId ?? "")}&restore_project_id=${encodeURIComponent(p.projectId)}`}>
-                        Try Another Style
-                      </Link>
-                    </Button>
-                    <Button asChild>
-                      <Link href={`/projects/${p.id}#connect`}>Connect Me</Link>
-                    </Button>
+                    <Link href={`/projects/${p.id}`} className={buttonVariants({ variant: "outline" })}>
+                      View Project
+                    </Link>
+                    <Link
+                      href={`/try?restore_generation_id=${encodeURIComponent(p.generationId ?? "")}&restore_project_id=${encodeURIComponent(p.projectId)}`}
+                      className={buttonVariants({ variant: "outline" })}
+                    >
+                      Try Another Style
+                    </Link>
+                    <Link href={`/projects/${p.id}#connect`} className={buttonVariants()}>
+                      Connect Me
+                    </Link>
                   </div>
                 </div>
               </article>

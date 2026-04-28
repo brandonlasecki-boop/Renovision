@@ -29,6 +29,7 @@ import {
 import { BATHROOM_STYLES } from "@/lib/homeowner-try/bathroom-styles";
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
+import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
 import afterBoldImage from "../../../Images/after_bold.png";
 import afterCleanImage from "../../../Images/after_clean.png";
 import afterLuxuryImage from "../../../Images/after_luxury.png";
@@ -232,6 +233,7 @@ export function HomeownerTryClient({
   const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
   const [firstUploadPreviewUrl, setFirstUploadPreviewUrl] = useState<string | null>(null);
+  const [storedAttribution, setStoredAttribution] = useState<RenovisionAttribution | null>(null);
   const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
   const bathroomCameraInputRef = useRef<HTMLInputElement>(null);
   const bathroomLibraryInputRef = useRef<HTMLInputElement>(null);
@@ -242,6 +244,10 @@ export function HomeownerTryClient({
   const [connectState, connectAction] = useActionState(trackConnectClickedAction, undefined);
   const [leadState, leadAction, leadPending] = useActionState(submitBathroomLeadAction, undefined);
   const [saveState, saveAction, savePending] = useActionState(saveMyProjectAction, undefined);
+
+  useEffect(() => {
+    setStoredAttribution(getStoredAttribution());
+  }, []);
 
   useEffect(() => {
     if (!restoredGeneration) return;
@@ -474,6 +480,7 @@ export function HomeownerTryClient({
   const displayStyleName = (styleId: (typeof BATHROOM_STYLES)[number]["id"], fallback: string) =>
     styleCardLabelById[styleId] ?? fallback;
   const authSaveState = saveState && "requiresAuth" in saveState ? saveState : null;
+  const attributionJson = storedAttribution ? JSON.stringify(storedAttribution) : "";
 
   useEffect(() => {
     if (!generation || compareBeforeSelection === "original") return;
@@ -587,6 +594,7 @@ export function HomeownerTryClient({
                         <input type="hidden" name="selected_style" value={style.id} />
                         <input type="hidden" name="user_description" value={userDescription} />
                         <input type="hidden" name="image_source" value="original" />
+                        <input type="hidden" name="attribution_json" value={attributionJson} />
                         <Button type="submit" className="h-11 w-full rounded-xl" disabled={regenPending}>
                           {regenPending ? "Designing your bathroom..." : "Use This Style"}
                         </Button>
@@ -642,6 +650,7 @@ export function HomeownerTryClient({
           <form action={generateAction} className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
             <input type="hidden" name="selected_style" value={selectedStyle ?? ""} />
             <input type="hidden" name="user_description" value={userDescription} />
+            <input type="hidden" name="attribution_json" value={attributionJson} />
             <div>
               <p className="text-xl font-semibold">Upload your bathroom photo</p>
               <p className="text-sm text-muted-foreground">We&apos;ll redesign it in the style you picked.</p>
@@ -794,6 +803,7 @@ export function HomeownerTryClient({
                   <input type="hidden" name="selected_style" value={generation.selectedStyle} />
                   <input type="hidden" name="image_source" value="current_mockup" />
                   <input type="hidden" name="source_mockup_id" value={generation.activeMockupId} />
+                  <input type="hidden" name="attribution_json" value={attributionJson} />
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div
@@ -1008,6 +1018,7 @@ export function HomeownerTryClient({
                     <input type="hidden" name="project_id" value={generation.projectId} />
                     <input type="hidden" name="selected_style" value={generation.selectedStyle} />
                     <input type="hidden" name="image_source" value="original" />
+                    <input type="hidden" name="attribution_json" value={attributionJson} />
                     <Button type="submit" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={regenPending}>
                       {regenPending ? "Regenerating..." : "Regenerate from photo"}
                     </Button>
@@ -1025,6 +1036,7 @@ export function HomeownerTryClient({
                 <form action={connectAction} className="w-full sm:w-auto">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
+                  <input type="hidden" name="attribution_json" value={attributionJson} />
                   <Button type="submit" className="w-full rounded-xl sm:w-auto">
                     Connect Me With a Remodeler
                   </Button>
@@ -1043,6 +1055,7 @@ export function HomeownerTryClient({
                 <form action={saveAction} className="w-full sm:w-auto">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
+                  <input type="hidden" name="attribution_json" value={attributionJson} />
                   <Button type="submit" variant="secondary" className="w-full rounded-xl sm:w-auto" disabled={savePending}>
                     {savePending ? "Saving..." : "Save My Project"}
                   </Button>
@@ -1064,6 +1077,7 @@ export function HomeownerTryClient({
                 <input type="hidden" name="selected_style" value={generation.styleName} />
                 <input type="hidden" name="estimate_min" value={String(generation.estimateRange.min)} />
                 <input type="hidden" name="estimate_max" value={String(generation.estimateRange.max)} />
+                <input type="hidden" name="attribution_json" value={attributionJson} />
                 <div className="space-y-1">
                   <Label htmlFor="lead_name">Name</Label>
                   <Input id="lead_name" name="name" required />

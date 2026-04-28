@@ -27,6 +27,12 @@ import {
   resolveBathroomStyleIdFromGeneration,
   type BathroomStyleId,
 } from "@/lib/homeowner-try/bathroom-styles";
+import {
+  attributionFromFormData,
+  mergeAttribution,
+  sanitizeAttribution,
+  type RenovisionAttribution,
+} from "@/lib/renovision/attribution";
 import { BOLD_MODERN_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/bold-modern-mockup-prompt";
 import { CLEAN_REFRESH_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/clean-refresh-mockup-prompt";
 import { LUXURY_ESCAPE_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/luxury-escape-mockup-prompt";
@@ -861,6 +867,52 @@ async function trackTryEvent(opts: {
   });
 }
 
+async function persistViewerAttribution(params: {
+  viewer: { userId: string | null; anonymousSessionId: string | null };
+  attribution: RenovisionAttribution | null;
+}): Promise<void> {
+  const incoming = sanitizeAttribution(params.attribution);
+  if (!incoming) return;
+  const svc = createServiceClient();
+
+  if (params.viewer.anonymousSessionId) {
+    const { data: row } = await svc
+      .from("renovision_anonymous_sessions")
+      .select("id, attribution")
+      .eq("id", params.viewer.anonymousSessionId)
+      .maybeSingle();
+    const merged = mergeAttribution(
+      sanitizeAttribution((row as { attribution?: unknown } | null)?.attribution ?? null),
+      incoming,
+    );
+    if (merged) {
+      await svc
+        .from("renovision_anonymous_sessions")
+        .update({ attribution: merged, updated_at: new Date().toISOString() })
+        .eq("id", params.viewer.anonymousSessionId);
+    }
+  }
+
+  if (params.viewer.userId) {
+    const { data: profileRow } = await svc
+      .from("profiles")
+      .select("id, last_renovision_attribution")
+      .eq("id", params.viewer.userId)
+      .maybeSingle();
+    const merged = mergeAttribution(
+      sanitizeAttribution(
+        (profileRow as { last_renovision_attribution?: unknown } | null)?.last_renovision_attribution ?? null,
+      ),
+      incoming,
+    );
+    if (merged) {
+      await svc
+        .from("profiles")
+        .upsert({ id: params.viewer.userId, last_renovision_attribution: merged }, { onConflict: "id" });
+    }
+  }
+}
+
 export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState> {
   try {
     const { userEmail, anonymousSessionId } = await getViewerContext(false);
@@ -943,6 +995,8 @@ export async function generateBathroomMockupAction(
   if (!viewer.userId && !viewer.anonymousSessionId) {
     return { error: "Could not start your session." };
   }
+  const incomingAttribution = attributionFromFormData(formData);
+  await persistViewerAttribution({ viewer, attribution: incomingAttribution });
 
   const existingProject = await findHomeownerTryProjectForContext({
     userId: viewer.userId,
@@ -972,6 +1026,10 @@ export async function generateBathroomMockupAction(
   }`;
 
   if (existingProject) {
+    const projectAttribution = mergeAttribution(
+      sanitizeAttribution((existingProject as { attribution?: unknown }).attribution ?? null),
+      incomingAttribution,
+    );
     await updateHomeownerTryProjectAi(projectId, {
       scope_description: scopeDescription,
       ai_summary: null,
@@ -984,6 +1042,7 @@ export async function generateBathroomMockupAction(
       .from("homeowner_try_projects")
       .update({
         before_storage_path: beforePath,
+        attribution: projectAttribution,
         updated_at: new Date().toISOString(),
       })
       .eq("id", projectId);
@@ -994,6 +1053,7 @@ export async function generateBathroomMockupAction(
       user_id: viewer.userId,
       before_storage_path: beforePath,
       scope_description: scopeDescription,
+      attribution: incomingAttribution,
     });
   }
 
@@ -1096,7 +1156,11 @@ export async function generateBathroomMockupAction(
     refinements_used: 0,
     selected_variation: null,
     lead_submitted: false,
+    attribution: incomingAttribution,
   });
+  if (process.env.NODE_ENV !== "production" && incomingAttribution) {
+    console.log("[renovision][attribution][generation]", { generationId, projectId, attribution: incomingAttribution });
+  }
 
   await trackTryEvent({
     eventType: "generation_completed",
@@ -1191,6 +1255,8 @@ export async function regenerateBathroomMockupAction(
   const sourceMockupId = str(formData, "source_mockup_id");
 
   const viewer = await getViewerContext(true);
+  const incomingAttribution = attributionFromFormData(formData);
+  await persistViewerAttribution({ viewer, attribution: incomingAttribution });
   const svc = createServiceClient();
 
   let regenerateFromRoom = true;
@@ -1377,6 +1443,15 @@ export async function regenerateBathroomMockupAction(
 
   const versionTtl = 60 * 60;
   const mockupVersions = await loadSignedMockupVersionsForProject(projectId, versionTtl);
+  const { data: existingGeneration } = await svc
+    .from("bathroom_generations")
+    .select("attribution")
+    .eq("id", generationId)
+    .maybeSingle();
+  const mergedGenerationAttribution = mergeAttribution(
+    sanitizeAttribution((existingGeneration as { attribution?: unknown } | null)?.attribution ?? null),
+    incomingAttribution,
+  );
 
   await svc
     .from("bathroom_generations")
@@ -1384,6 +1459,7 @@ export async function regenerateBathroomMockupAction(
       generated_image_url: latest.storage_path,
       estimate_min: estimateFromImages.estimateRange.min,
       estimate_max: estimateFromImages.estimateRange.max,
+      attribution: mergedGenerationAttribution,
     })
     .eq("id", generationId);
 
@@ -1596,6 +1672,7 @@ export async function loadTryGenerationForViewer(params: {
 async function saveMyProjectForViewerCore(params: {
   generationId: string;
   projectId: string;
+  attribution: RenovisionAttribution | null;
 }): Promise<
   | { ok: true }
   | { error: string }
@@ -1611,6 +1688,7 @@ async function saveMyProjectForViewerCore(params: {
   const projectId = params.projectId.trim();
   if (!generationId || !projectId) return { error: "Missing project context." };
   const viewer = await getViewerContext(true);
+  await persistViewerAttribution({ viewer, attribution: params.attribution });
   const nextPath = `/try?restore_generation_id=${encodeURIComponent(generationId)}&restore_project_id=${encodeURIComponent(projectId)}&auto_save_project=1`;
   if (!viewer.userId) {
     return {
@@ -1625,7 +1703,7 @@ async function saveMyProjectForViewerCore(params: {
   const svc = createServiceClient();
   const { data: generation } = await svc
     .from("bathroom_generations")
-    .select("id, project_id, uploaded_image_url, generated_image_url, selected_style, estimate_min, estimate_max")
+    .select("id, project_id, uploaded_image_url, generated_image_url, selected_style, estimate_min, estimate_max, attribution")
     .eq("id", generationId)
     .eq("project_id", projectId)
     .maybeSingle();
@@ -1661,6 +1739,10 @@ async function saveMyProjectForViewerCore(params: {
     estimate_max: generation.estimate_max,
     zip_code: lead?.zip_code ?? null,
     lead_id: lead?.id ?? null,
+    attribution: mergeAttribution(
+      sanitizeAttribution((generation as { attribution?: unknown }).attribution ?? null),
+      params.attribution,
+    ),
     status: "saved",
     updated_at: new Date().toISOString(),
   };
@@ -1683,13 +1765,18 @@ async function saveMyProjectForViewerCore(params: {
 export async function saveMyProjectForViewer(params: {
   generationId: string;
   projectId: string;
+  attribution?: RenovisionAttribution | null;
 }): Promise<
   | { success: true }
   | { error: string }
   | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
 > {
-  const res = await saveMyProjectForViewerCore(params);
-  if ("ok" in res && res.ok) return { success: true };
+  const res = await saveMyProjectForViewerCore({
+    generationId: params.generationId,
+    projectId: params.projectId,
+    attribution: params.attribution ?? null,
+  });
+  if ("ok" in res) return { success: true };
   return res;
 }
 
@@ -1704,8 +1791,9 @@ export async function saveMyProjectAction(
   const result = await saveMyProjectForViewerCore({
     generationId: str(formData, "generation_id"),
     projectId: str(formData, "project_id"),
+    attribution: attributionFromFormData(formData),
   });
-  if ("ok" in result && result.ok) return { success: true };
+  if ("ok" in result) return { success: true };
   return result;
 }
 
@@ -1716,12 +1804,14 @@ export async function trackConnectClickedAction(
   const projectId = str(formData, "project_id");
   const generationId = str(formData, "generation_id");
   const viewer = await getViewerContext(true);
+  const incomingAttribution = attributionFromFormData(formData);
+  await persistViewerAttribution({ viewer, attribution: incomingAttribution });
   await trackTryEvent({
     eventType: "connect_clicked",
     userId: viewer.userId,
     anonymousSessionId: viewer.anonymousSessionId,
     projectId: projectId || null,
-    metadata: { generation_id: generationId || null },
+    metadata: { generation_id: generationId || null, attribution: incomingAttribution },
   });
   return { success: true };
 }
@@ -1751,6 +1841,8 @@ export async function submitBathroomLeadAction(
   }
 
   const viewer = await getViewerContext(true);
+  const incomingAttribution = attributionFromFormData(formData);
+  await persistViewerAttribution({ viewer, attribution: incomingAttribution });
   const svc = createServiceClient();
   await svc.from("leads").insert({
     generation_id: generationId,
@@ -1766,7 +1858,11 @@ export async function submitBathroomLeadAction(
     selected_style: selectedStyle,
     estimate_min: estimateMin,
     estimate_max: estimateMax,
+    attribution: incomingAttribution,
   });
+  if (process.env.NODE_ENV !== "production" && incomingAttribution) {
+    console.log("[renovision][attribution][lead]", { generationId, projectId, attribution: incomingAttribution });
+  }
   await svc.from("bathroom_generations").update({ lead_submitted: true }).eq("id", generationId);
 
   await trackTryEvent({

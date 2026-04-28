@@ -11,6 +11,7 @@ export type HomeownerTryProjectRow = {
   material_estimate: unknown;
   ai_status: "idle" | "pending" | "complete" | "failed";
   ai_last_error: string | null;
+  attribution: unknown | null;
 };
 
 export type HomeownerTryMockupRow = {
@@ -27,7 +28,7 @@ export async function getHomeownerTryProjectById(
   const { data, error } = await supabase
     .from("homeowner_try_projects")
     .select(
-      "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error",
+      "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error, attribution",
     )
     .eq("id", projectId)
     .maybeSingle();
@@ -47,7 +48,7 @@ export async function findHomeownerTryProjectForContext(opts: {
     const { data, error } = await supabase
       .from("homeowner_try_projects")
       .select(
-        "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error",
+        "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error, attribution",
       )
       .eq("user_id", opts.userId)
       .maybeSingle();
@@ -60,7 +61,7 @@ export async function findHomeownerTryProjectForContext(opts: {
     const { data, error } = await supabase
       .from("homeowner_try_projects")
       .select(
-        "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error",
+        "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error, attribution",
       )
       .eq("anonymous_session_id", opts.anonymousSessionId)
       .maybeSingle();
@@ -78,6 +79,7 @@ export async function insertHomeownerTryProject(row: {
   user_id: string | null;
   before_storage_path: string;
   scope_description: string;
+  attribution?: unknown | null;
 }): Promise<void> {
   const supabase = createServiceClient();
   const { error } = await supabase.from("homeowner_try_projects").insert({
@@ -86,6 +88,7 @@ export async function insertHomeownerTryProject(row: {
     user_id: row.user_id,
     before_storage_path: row.before_storage_path,
     scope_description: row.scope_description,
+    attribution: row.attribution ?? null,
   });
   if (error) {
     throw new Error(error.message);
