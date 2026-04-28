@@ -130,6 +130,7 @@ export type RenovisionGeneratingLoaderProps = {
   title: string;
   hint: string;
   elapsedSec: number;
+  progressSteps?: string[];
   /** Original bathroom photo (signed URL or `blob:`) — full-bleed under the brand row. */
   beforeImageUrl?: string | null;
 };
@@ -320,11 +321,22 @@ export function RenovisionGeneratingLoader({
   title,
   hint,
   elapsedSec,
+  progressSteps,
   beforeImageUrl,
 }: RenovisionGeneratingLoaderProps) {
   const factIndex = Math.floor(elapsedSec / FACT_DISPLAY_INTERVAL_SEC) % BATHROOM_FACTS.length;
   const fact = BATHROOM_FACTS[factIndex];
   const beforeSrc = beforeImageUrl?.trim() ?? "";
+  const activeProgressSteps = progressSteps?.length
+    ? progressSteps
+    : [
+        "Analyzing your layout...",
+        "Designing your new space...",
+        "Applying finishes...",
+        "Finalizing your remodel...",
+      ];
+  const progressStepIndex = Math.floor(elapsedSec / 4) % activeProgressSteps.length;
+  const progressStep = activeProgressSteps[progressStepIndex];
 
   useEffect(() => {
     const html = document.documentElement;
@@ -373,8 +385,15 @@ export function RenovisionGeneratingLoader({
 
         <p className="mt-4 text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
+        <p
+          key={progressStepIndex}
+          className="mt-3 rounded-lg border border-renovision-teal/30 bg-renovision-teal/10 px-3 py-2 text-sm font-semibold text-renovision-navy"
+        >
+          🔥 {progressStep}
+        </p>
 
         <div className="renovision-loader-fact mt-4 rounded-xl border border-renovision-orange/25 bg-renovision-orange-muted/60 px-4 py-3 text-left text-sm leading-snug shadow-sm">
+          <span className="block text-xs font-semibold text-renovision-navy/80">While we design your space...</span>
           <span className="block text-xs font-bold uppercase tracking-wide text-renovision-orange">
             Did you know?
           </span>
@@ -392,7 +411,7 @@ export function RenovisionGeneratingLoader({
           Elapsed {Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, "0")}
         </p>
         <p className="mt-2.5 max-w-[280px] text-center text-[11px] leading-snug text-muted-foreground">
-          Keep this page open until we&apos;re done. Navigating away may interrupt your design.
+          Hang tight — your design is almost ready.
         </p>
       </div>
     </div>

@@ -18,10 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   generateBathroomMockupAction,
   regenerateBathroomMockupAction,
+  saveMyProjectAction,
   selectTryMockupVersionAction,
   submitBathroomLeadAction,
   trackConnectClickedAction,
   type HomeownerTryPageState,
+  type TryGenerationViewState,
   type TryTweakSuggestion,
 } from "@/lib/actions/homeowner-try";
 import { BATHROOM_STYLES } from "@/lib/homeowner-try/bathroom-styles";
@@ -75,12 +77,16 @@ function assignImageToFileInput(target: HTMLInputElement, file: File | undefined
 function CompareBeforePicker({
   idSuffix,
   mockupVersions,
+  styleId,
+  styleName,
   value,
   onChange,
   disabled,
 }: {
   idSuffix: string;
   mockupVersions: TryMockupVersionRow[];
+  styleId: string;
+  styleName: string;
   value: string;
   onChange: (mockupIdOrOriginal: string) => void;
   disabled: boolean;
@@ -101,7 +107,7 @@ function CompareBeforePicker({
         <option value="original">Original photo</option>
         {mockupVersions.map((v) => (
           <option key={v.id} value={v.id}>
-            {v.label} mockup
+            {formatVersionLabel(v.label, styleId, styleName)} mockup
           </option>
         ))}
       </select>
@@ -120,6 +126,8 @@ function MockupVersionPicker({
   generation: {
     generationId: string;
     projectId: string;
+    selectedStyle: string;
+    styleName: string;
     mockupVersions: TryMockupVersionRow[];
     activeMockupId: string;
   };
@@ -149,7 +157,7 @@ function MockupVersionPicker({
       >
         {generation.mockupVersions.map((v) => (
           <option key={v.id} value={v.id}>
-            {v.label}
+            {formatVersionLabel(v.label, generation.selectedStyle, generation.styleName)}
           </option>
         ))}
       </select>
@@ -157,10 +165,39 @@ function MockupVersionPicker({
   );
 }
 
-export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryPageState, { ok: false }> }) {
+function styleTokenForVersionLabel(styleId: string, styleName: string): string {
+  if (styleId === "luxury_escape") return "Modern";
+  if (styleId === "spa_retreat") return "Spa";
+  if (styleId === "warm_minimalist") return "Warm";
+  if (styleId === "bold_modern") return "Bold";
+  if (styleId === "clean_refresh") return "Clean";
+  const first = styleName.trim().split(/\s+/)[0] ?? "";
+  return first || "Style";
+}
+
+function formatVersionLabel(versionLabel: string, styleId: string, styleName: string): string {
+  const clean = versionLabel.trim();
+  const vMatch = clean.match(/^v\s*(\d+)$/i);
+  if (vMatch?.[1]) {
+    return `V${vMatch[1]} ${styleTokenForVersionLabel(styleId, styleName)}`;
+  }
+  return `${clean} ${styleTokenForVersionLabel(styleId, styleName)}`.trim();
+}
+
+export function HomeownerTryClient({
+  initial,
+  restoredGeneration = null,
+  autoSavedProject = false,
+}: {
+  initial: Exclude<HomeownerTryPageState, { ok: false }>;
+  restoredGeneration?: TryGenerationViewState | null;
+  autoSavedProject?: boolean;
+}) {
   const [selectedStyle, setSelectedStyle] = useState<(typeof BATHROOM_STYLES)[number]["id"] | null>(null);
   const [userDescription, setUserDescription] = useState("");
   const [step, setStep] = useState<"style" | "upload" | "result" | "connect">("style");
+  const [showAllStyles, setShowAllStyles] = useState(false);
+  const [quickStyleSwitchMode, setQuickStyleSwitchMode] = useState(false);
   const [generation, setGeneration] = useState<{
     generationId: string;
     projectId: string;
@@ -190,6 +227,7 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
   } | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
   /** Compare slider / split left side: original upload or a saved mockup id (display-only). */
   const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
@@ -203,6 +241,20 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
   const [versionState, versionAction, versionPending] = useActionState(selectTryMockupVersionAction, undefined);
   const [connectState, connectAction] = useActionState(trackConnectClickedAction, undefined);
   const [leadState, leadAction, leadPending] = useActionState(submitBathroomLeadAction, undefined);
+  const [saveState, saveAction, savePending] = useActionState(saveMyProjectAction, undefined);
+
+  useEffect(() => {
+    if (!restoredGeneration) return;
+    setGeneration(restoredGeneration);
+    setCompareBeforeSelection("original");
+    setStep("result");
+  }, [restoredGeneration]);
+
+  useEffect(() => {
+    if (autoSavedProject) {
+      toast.success("Project saved");
+    }
+  }, [autoSavedProject]);
 
   useEffect(() => {
     if (generateState && "success" in generateState && generateState.success) {
@@ -225,6 +277,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
           ? {
               ...prev,
               generatedImageUrl: regenState.generatedImageUrl,
+              selectedStyle: regenState.selectedStyle,
+              styleName: regenState.styleName,
               estimateRange: regenState.estimateRange,
               breakdown: regenState.breakdown,
               detailedBreakdown: regenState.detailedBreakdown ?? prev.detailedBreakdown ?? [],
@@ -239,6 +293,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             }
           : prev,
       );
+      setStep("result");
+      setQuickStyleSwitchMode(false);
     }
   }, [regenState]);
 
@@ -288,6 +344,22 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
     }
   }, [leadState]);
 
+  useEffect(() => {
+    if (!saveState) return;
+    if ("success" in saveState && saveState.success) {
+      toast.success("Project saved");
+      setSaveModalOpen(false);
+      return;
+    }
+    if ("requiresAuth" in saveState && saveState.requiresAuth) {
+      setSaveModalOpen(true);
+      return;
+    }
+    if ("error" in saveState && saveState.error) {
+      toast.error("Could not save project", { description: saveState.error.slice(0, 220) });
+    }
+  }, [saveState]);
+
   const selectedStyleConfig = useMemo(
     () => BATHROOM_STYLES.find((s) => s.id === selectedStyle) ?? null,
     [selectedStyle],
@@ -301,12 +373,40 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
   }, [step]);
 
   const loading = generatePending || regenPending || versionPending;
+  const loadingProgressSteps = useMemo(() => {
+    if (generatePending) {
+      return [
+        "Analyzing your layout...",
+        "Mapping your fixtures...",
+        "Applying your selected style...",
+        "Finalizing your remodel...",
+        "Homeowners use Renovision to explore ideas before committing.",
+      ];
+    }
+    if (regenPending) {
+      return [
+        "Reviewing your requested updates...",
+        "Reworking your bathroom design...",
+        "Applying materials and finishes...",
+        "Finalizing your refreshed mockup...",
+      ];
+    }
+    if (versionPending) {
+      return [
+        "Loading your selected version...",
+        "Syncing design details...",
+        "Preparing the comparison view...",
+        "Finalizing your mockup display...",
+      ];
+    }
+    return undefined;
+  }, [generatePending, regenPending, versionPending]);
 
   const loadingCopy = useMemo(() => {
     if (generatePending) {
       return {
-        title: "Generating your first mockup…",
-        hint: "This usually takes one to three minutes. Thanks for your patience.",
+        title: "Designing your bathroom...",
+        hint: "This takes about 60–90 seconds",
       };
     }
     if (regenPending) {
@@ -360,6 +460,21 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
     return row?.imageUrl ?? generation.uploadedImageUrl;
   }, [generation, compareBeforeSelection]);
 
+  const primaryStyleIds: Array<(typeof BATHROOM_STYLES)[number]["id"]> = [
+    "spa_retreat",
+    "luxury_escape",
+    "warm_minimalist",
+  ];
+  const primaryStyles = BATHROOM_STYLES.filter((style) => primaryStyleIds.includes(style.id));
+  const additionalStyles = BATHROOM_STYLES.filter((style) => !primaryStyleIds.includes(style.id));
+  const stylesToRender = showAllStyles ? [...primaryStyles, ...additionalStyles] : primaryStyles;
+  const styleCardLabelById: Partial<Record<(typeof BATHROOM_STYLES)[number]["id"], string>> = {
+    luxury_escape: "Modern Luxury",
+  };
+  const displayStyleName = (styleId: (typeof BATHROOM_STYLES)[number]["id"], fallback: string) =>
+    styleCardLabelById[styleId] ?? fallback;
+  const authSaveState = saveState && "requiresAuth" in saveState ? saveState : null;
+
   useEffect(() => {
     if (!generation || compareBeforeSelection === "original") return;
     const ok = generation.mockupVersions.some((v) => v.id === compareBeforeSelection);
@@ -373,6 +488,7 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
           title={loadingCopy.title}
           hint={loadingCopy.hint}
           elapsedSec={loadingElapsedSec}
+          progressSteps={loadingProgressSteps}
           beforeImageUrl={generation?.uploadedImageUrl ?? firstUploadPreviewUrl}
         />
       ) : null}
@@ -383,9 +499,8 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
           ) : (
             <>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">Renovision MVP</p>
-              <h1 className="text-balance text-3xl font-semibold tracking-tight">See your future bathroom instantly</h1>
-              <p className="text-sm text-muted-foreground">Choose a vibe, upload your bathroom, and get an AI mockup fast.</p>
+              <h1 className="text-balance text-3xl font-semibold tracking-tight">See your bathroom remodel before you build it</h1>
+              <p className="text-sm text-muted-foreground">Choose a style, upload your bathroom, and preview your remodel in minutes.</p>
               <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
             </>
           )}
@@ -393,10 +508,27 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
 
         {step === "style" ? (
           <section className="space-y-6">
+            <div className="space-y-2">
+              <h1 className="text-balance text-3xl font-semibold tracking-tight">Pick a style to start your remodel</h1>
+              <p className="text-sm text-muted-foreground">You can try different styles later.</p>
+              <p className="text-sm text-muted-foreground">
+                Not sure? Pick one to start — you can try another style later.
+              </p>
+              {quickStyleSwitchMode && generation ? (
+                <p className="text-sm font-medium text-renovision-navy">
+                  Your photo is already saved. Pick a style and we&apos;ll generate a new version right away.
+                </p>
+              ) : null}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {BATHROOM_STYLES.map((style) => (
+              {stylesToRender.map((style) => (
                 <article key={style.id} className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
                   <div className="relative aspect-[4/3] bg-muted">
+                    {style.id === "spa_retreat" ? (
+                      <span className="absolute left-3 top-3 z-10 rounded-full bg-renovision-orange px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+                        Most Popular
+                      </span>
+                    ) : null}
                     {style.id === "spa_retreat" ? (
                       <Image
                         src={afterSpaImage}
@@ -444,27 +576,51 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                     )}
                   </div>
                   <div className="space-y-2 p-4">
-                    <div className="flex min-w-0 items-baseline justify-between gap-2">
-                      <p className="min-w-0 flex-1 truncate text-base font-semibold leading-tight">{style.name}</p>
-                      <p className="shrink-0 text-sm font-semibold tabular-nums text-renovision-navy">
-                        ${Math.round(style.estimateMin / 1000)}K–${Math.round(style.estimateMax / 1000)}K
-                      </p>
-                    </div>
+                    <p className="min-w-0 truncate text-lg font-semibold leading-tight">
+                      {displayStyleName(style.id, style.name)}
+                    </p>
                     <p className="text-sm text-muted-foreground">{style.subtitle}</p>
-                    <Button
-                      type="button"
-                      className="w-full rounded-xl"
-                      onClick={() => {
-                        setSelectedStyle(style.id);
-                        setStep("upload");
-                      }}
-                    >
-                      Use this style
-                    </Button>
+                    {quickStyleSwitchMode && generation ? (
+                      <form action={regenAction}>
+                        <input type="hidden" name="generation_id" value={generation.generationId} />
+                        <input type="hidden" name="project_id" value={generation.projectId} />
+                        <input type="hidden" name="selected_style" value={style.id} />
+                        <input type="hidden" name="user_description" value={userDescription} />
+                        <input type="hidden" name="image_source" value="original" />
+                        <Button type="submit" className="h-11 w-full rounded-xl" disabled={regenPending}>
+                          {regenPending ? "Designing your bathroom..." : "Use This Style"}
+                        </Button>
+                      </form>
+                    ) : (
+                      <Button
+                        type="button"
+                        className="h-11 w-full rounded-xl"
+                        onClick={() => {
+                          setQuickStyleSwitchMode(false);
+                          setSelectedStyle(style.id);
+                          setStep("upload");
+                        }}
+                      >
+                        Use this style
+                      </Button>
+                    )}
                   </div>
                 </article>
               ))}
             </div>
+
+            {additionalStyles.length > 0 ? (
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="px-0 text-sm font-semibold text-renovision-navy hover:bg-transparent hover:text-renovision-navy/85"
+                  onClick={() => setShowAllStyles((prev) => !prev)}
+                >
+                  {showAllStyles ? "Show fewer styles" : "View all styles"}
+                </Button>
+              </div>
+            ) : null}
 
             <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
               <Label htmlFor="user_vision" className="text-sm font-semibold">
@@ -487,10 +643,14 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             <input type="hidden" name="selected_style" value={selectedStyle ?? ""} />
             <input type="hidden" name="user_description" value={userDescription} />
             <div>
-              <p className="text-xl font-semibold">Upload your bathroom</p>
-              <p className="text-sm text-muted-foreground">We&apos;ll turn it into your selected remodel style.</p>
+              <p className="text-xl font-semibold">Upload your bathroom photo</p>
+              <p className="text-sm text-muted-foreground">We&apos;ll redesign it in the style you picked.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Your photo is used to create your remodel preview.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Works best with a clear photo of the full bathroom.</p>
               {selectedStyleConfig ? (
-                <p className="mt-1 text-xs font-medium text-renovision-navy">Selected style: {selectedStyleConfig.name}</p>
+                <p className="mt-1 text-xs font-medium text-renovision-navy">
+                  Selected style: {displayStyleName(selectedStyleConfig.id, selectedStyleConfig.name)}
+                </p>
               ) : null}
             </div>
             <div className="space-y-3">
@@ -585,13 +745,14 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                 variant="outline"
                 onClick={() => {
                   setFirstUploadPreviewUrl(null);
+                  setQuickStyleSwitchMode(false);
                   setStep("style");
                 }}
               >
                 Back
               </Button>
               <Button type="submit" className="rounded-xl">
-                {generatePending ? "Creating your bathroom remodel…" : "Generate my first mockup"}
+                {generatePending ? "Designing your bathroom..." : "Generate My Mockup"}
               </Button>
             </div>
           </form>
@@ -600,10 +761,13 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
         {step === "result" && generation ? (
           <section className="space-y-6">
             <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Like this direction? We can help you explore next steps.</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
                 <CompareBeforePicker
                     idSuffix="slider"
                     mockupVersions={generation.mockupVersions}
+                    styleId={generation.selectedStyle}
+                    styleName={generation.styleName}
                     value={compareBeforeSelection}
                     onChange={setCompareBeforeSelection}
                     disabled={versionPending}
@@ -706,17 +870,20 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                   </div>
 
                   <div className="rounded-2xl border border-border/70 bg-muted/25 p-4 sm:p-5">
-                    <Label htmlFor="try-custom-tweak" className="sr-only">
-                      Custom directions (optional)
+                    <Label htmlFor="try-custom-tweak" className="text-sm font-semibold text-foreground">
+                      Custom design notes (optional)
                     </Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Tell Renovision what to change in this mockup, like materials, colors, fixtures, or layout details.
+                    </p>
                     <Textarea
                       id="try-custom-tweak"
                       name="custom_tweak"
                       rows={4}
                       maxLength={1200}
                       disabled={regenPending}
-                      placeholder=""
-                      className="min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
+                      placeholder="Example: Keep the same layout, add warm wood vanity, matte black fixtures, and larger mirror lighting."
+                      className="mt-3 min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
                     />
                   </div>
 
@@ -853,14 +1020,36 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
             </div>
 
             <div className="rounded-2xl border border-renovision-navy/20 bg-background p-4 shadow-lg">
-              <p className="text-lg font-semibold">Want a contractor to quote this remodel?</p>
-              <form action={connectAction} className="mt-3">
-                <input type="hidden" name="generation_id" value={generation.generationId} />
-                <input type="hidden" name="project_id" value={generation.projectId} />
-                <Button type="submit" className="w-full rounded-xl sm:w-auto">
-                  Connect me with a contractor
+              <p className="text-lg font-semibold">Like this direction? We can help you explore next steps.</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <form action={connectAction} className="w-full sm:w-auto">
+                  <input type="hidden" name="generation_id" value={generation.generationId} />
+                  <input type="hidden" name="project_id" value={generation.projectId} />
+                  <Button type="submit" className="w-full rounded-xl sm:w-auto">
+                    Connect Me With a Remodeler
+                  </Button>
+                </form>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl sm:w-auto"
+                  onClick={() => {
+                    setQuickStyleSwitchMode(true);
+                    setStep("style");
+                  }}
+                >
+                  Try Another Style
                 </Button>
-              </form>
+                <form action={saveAction} className="w-full sm:w-auto">
+                  <input type="hidden" name="generation_id" value={generation.generationId} />
+                  <input type="hidden" name="project_id" value={generation.projectId} />
+                  <Button type="submit" variant="secondary" className="w-full rounded-xl sm:w-auto" disabled={savePending}>
+                    {savePending ? "Saving..." : "Save My Project"}
+                  </Button>
+                </form>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Save this design and come back anytime.</p>
+              <p className="mt-2 text-xs text-muted-foreground">No contractor contact unless you request it.</p>
             </div>
           </section>
         ) : null}
@@ -911,6 +1100,33 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
                     <option>$35K+</option>
                   </select>
                 </div>
+                <div className="space-y-1">
+                  <Label htmlFor="lead_contact_method">Preferred contact method</Label>
+                  <select
+                    id="lead_contact_method"
+                    name="preferred_contact_method"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    required
+                  >
+                    <option value="">Select preference</option>
+                    <option>Text</option>
+                    <option>Phone call</option>
+                    <option>Email</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="lead_contact_time">Best time to reach you (optional)</Label>
+                  <select
+                    id="lead_contact_time"
+                    name="best_contact_time"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Anytime</option>
+                    <option>Morning</option>
+                    <option>Afternoon</option>
+                    <option>Evening</option>
+                  </select>
+                </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label htmlFor="lead_notes">Project notes</Label>
                   <textarea
@@ -936,6 +1152,50 @@ export function HomeownerTryClient({ initial }: { initial: Exclude<HomeownerTryP
           </section>
         ) : null}
       </div>
+
+      {saveModalOpen && authSaveState ? (
+        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+            <h3 className="text-xl font-semibold">Save your remodel design</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Create a free account so you can come back to your bathroom, styles, estimates, and remodel request later.
+            </p>
+            <div className="mt-4 space-y-2">
+              <a
+                href={authSaveState.googlePath}
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm font-semibold"
+              >
+                Save My Project with Google
+              </a>
+              <a
+                href={authSaveState.magicLinkPath}
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white"
+              >
+                Save My Project with Magic Link
+              </a>
+              <a
+                href={authSaveState.signupPath}
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm font-semibold"
+              >
+                Save My Project with Email
+              </a>
+              <a
+                href={authSaveState.loginPath}
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm"
+              >
+                I already have an account
+              </a>
+            </div>
+            <button
+              type="button"
+              className="mt-3 w-full text-sm text-muted-foreground"
+              onClick={() => setSaveModalOpen(false)}
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

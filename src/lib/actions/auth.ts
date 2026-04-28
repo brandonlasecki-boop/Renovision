@@ -82,3 +82,25 @@ export async function signOut() {
   revalidatePath("/", "layout");
   redirect("/login");
 }
+
+export async function sendMagicLink(
+  _prev: { error?: string; success?: boolean } | undefined,
+  formData: FormData,
+): Promise<{ error: string } | { success: true }> {
+  const email = String(formData.get("email") ?? "").trim();
+  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const nextPath =
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  if (!email) return { error: "Email is required." };
+
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${base}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+    },
+  });
+  if (error) return { error: error.message };
+  return { success: true };
+}

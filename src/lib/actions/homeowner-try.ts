@@ -42,6 +42,34 @@ export type HomeownerTryPageState =
     }
   | { ok: false; message: string };
 
+export type TryGenerationViewState = {
+  generationId: string;
+  projectId: string;
+  selectedStyle: BathroomStyleId;
+  styleName: string;
+  uploadedImageUrl: string;
+  generatedImageUrl: string;
+  estimateRange: { min: number; max: number };
+  breakdown: {
+    materials: { min: number; max: number };
+    labor: { min: number; max: number };
+    fixtures: { min: number; max: number };
+  };
+  detailedBreakdown: Array<{
+    category: string;
+    min: number;
+    max: number;
+    reason: string;
+  }>;
+  reasoning: string[];
+  assumptions: string[];
+  confidence: "low" | "medium" | "high";
+  saveMoneySuggestions: TryTweakSuggestion[];
+  improveDesignSuggestions: TryTweakSuggestion[];
+  mockupVersions: SignedTryMockupVersion[];
+  activeMockupId: string;
+};
+
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
 }
@@ -1117,6 +1145,8 @@ export async function regenerateBathroomMockupAction(
       success: true;
       generatedImageUrl: string;
       projectId: string;
+      selectedStyle: BathroomStyleId;
+      styleName: string;
       estimateRange: { min: number; max: number };
       breakdown: {
         materials: { min: number; max: number };
@@ -1142,6 +1172,7 @@ export async function regenerateBathroomMockupAction(
   const projectId = str(formData, "project_id");
   const selectedStyleRaw = str(formData, "selected_style");
   const selectedStyle = (getBathroomStyleById(selectedStyleRaw)?.id ?? "clean_refresh") as BathroomStyleId;
+  const selectedStyleConfig = getBathroomStyleById(selectedStyle) ?? getBathroomStyleById("clean_refresh");
   if (!generationId || !projectId) return { error: "Missing generation context." };
 
   const saveHintSelections = formData
@@ -1369,6 +1400,8 @@ export async function regenerateBathroomMockupAction(
     success: true,
     generatedImageUrl: generatedSigned.data.signedUrl,
     projectId,
+    selectedStyle,
+    styleName: selectedStyleConfig?.name ?? "Clean Refresh",
     estimateRange: estimateFromImages.estimateRange,
     breakdown: estimateFromImages.breakdown,
     detailedBreakdown: estimateFromImages.detailedBreakdown,
@@ -1489,6 +1522,193 @@ export async function selectTryMockupVersionAction(
   };
 }
 
+export async function loadTryGenerationForViewer(params: {
+  generationId: string;
+  projectId: string;
+}): Promise<TryGenerationViewState | null> {
+  const generationId = String(params.generationId || "").trim();
+  const projectId = String(params.projectId || "").trim();
+  if (!generationId || !projectId) return null;
+
+  const viewer = await getViewerContext(false);
+  const svc = createServiceClient();
+  const { data: generation } = await svc
+    .from("bathroom_generations")
+    .select(
+      "id, project_id, selected_style, uploaded_image_url, generated_image_url, estimate_min, estimate_max",
+    )
+    .eq("id", generationId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!generation) return null;
+
+  const { data: project } = await svc
+    .from("homeowner_try_projects")
+    .select("id, user_id, anonymous_session_id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return null;
+
+  const canView =
+    (viewer.userId && project.user_id === viewer.userId) ||
+    (!viewer.userId && viewer.anonymousSessionId && project.anonymous_session_id === viewer.anonymousSessionId);
+  if (!canView) return null;
+
+  const styleId = resolveBathroomStyleIdFromGeneration(generation.selected_style);
+  const style = getBathroomStyleById(styleId) ?? getBathroomStyleById("clean_refresh");
+  if (!style) return null;
+  const defaults = defaultEstimateFromStyle(style);
+
+  const beforeSigned = await svc.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUrl(String(generation.uploaded_image_url || ""), 60 * 60);
+  const afterSigned = await svc.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUrl(String(generation.generated_image_url || ""), 60 * 60);
+  if (!beforeSigned.data?.signedUrl || !afterSigned.data?.signedUrl) return null;
+
+  const mockupVersions = await loadSignedMockupVersionsForProject(projectId, 60 * 60);
+  const active = mockupVersions.at(-1);
+
+  return {
+    generationId,
+    projectId,
+    selectedStyle: styleId,
+    styleName: style.name,
+    uploadedImageUrl: beforeSigned.data.signedUrl,
+    generatedImageUrl: afterSigned.data.signedUrl,
+    estimateRange: {
+      min: clampMoney(generation.estimate_min, defaults.estimateRange.min),
+      max: clampMoney(generation.estimate_max, defaults.estimateRange.max),
+    },
+    breakdown: defaults.breakdown,
+    detailedBreakdown: defaults.detailedBreakdown,
+    reasoning: defaults.reasoning,
+    assumptions: defaults.assumptions,
+    confidence: defaults.confidence,
+    saveMoneySuggestions: defaults.saveMoneySuggestions,
+    improveDesignSuggestions: defaults.improveDesignSuggestions,
+    mockupVersions,
+    activeMockupId: active?.id ?? "",
+  };
+}
+
+async function saveMyProjectForViewerCore(params: {
+  generationId: string;
+  projectId: string;
+}): Promise<
+  | { ok: true }
+  | { error: string }
+  | {
+      requiresAuth: true;
+      loginPath: string;
+      signupPath: string;
+      magicLinkPath: string;
+      googlePath: string;
+    }
+> {
+  const generationId = params.generationId.trim();
+  const projectId = params.projectId.trim();
+  if (!generationId || !projectId) return { error: "Missing project context." };
+  const viewer = await getViewerContext(true);
+  const nextPath = `/try?restore_generation_id=${encodeURIComponent(generationId)}&restore_project_id=${encodeURIComponent(projectId)}&auto_save_project=1`;
+  if (!viewer.userId) {
+    return {
+      requiresAuth: true,
+      loginPath: `/login?next=${encodeURIComponent(nextPath)}`,
+      signupPath: `/signup?next=${encodeURIComponent(nextPath)}`,
+      magicLinkPath: `/auth/magic-link?next=${encodeURIComponent(nextPath)}`,
+      googlePath: `/auth/google/start?next=${encodeURIComponent(nextPath)}`,
+    };
+  }
+
+  const svc = createServiceClient();
+  const { data: generation } = await svc
+    .from("bathroom_generations")
+    .select("id, project_id, uploaded_image_url, generated_image_url, selected_style, estimate_min, estimate_max")
+    .eq("id", generationId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+  if (!generation) return { error: "Could not find this generated project." };
+
+  const { data: lead } = await svc
+    .from("leads")
+    .select("id, zip_code")
+    .eq("generation_id", generationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await svc
+    .from("homeowner_try_projects")
+    .update({
+      user_id: viewer.userId,
+      anonymous_session_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId);
+
+  await svc.from("bathroom_generations").update({ user_id: viewer.userId }).eq("id", generationId);
+
+  const payload = {
+    user_id: viewer.userId,
+    project_id: projectId,
+    generation_id: generationId,
+    before_storage_path: generation.uploaded_image_url,
+    generated_storage_path: generation.generated_image_url,
+    selected_style: generation.selected_style,
+    estimate_min: generation.estimate_min,
+    estimate_max: generation.estimate_max,
+    zip_code: lead?.zip_code ?? null,
+    lead_id: lead?.id ?? null,
+    status: "saved",
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await svc.from("renovision_saved_projects").upsert(payload, {
+    onConflict: "user_id,project_id",
+  });
+  if (error) return { error: error.message };
+
+  await trackTryEvent({
+    eventType: "project_saved",
+    userId: viewer.userId,
+    anonymousSessionId: viewer.anonymousSessionId,
+    projectId,
+    metadata: { generation_id: generationId },
+  });
+  return { ok: true };
+}
+
+export async function saveMyProjectForViewer(params: {
+  generationId: string;
+  projectId: string;
+}): Promise<
+  | { success: true }
+  | { error: string }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
+> {
+  const res = await saveMyProjectForViewerCore(params);
+  if ("ok" in res && res.ok) return { success: true };
+  return res;
+}
+
+export async function saveMyProjectAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<
+  | { error: string }
+  | { success: true }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
+> {
+  const result = await saveMyProjectForViewerCore({
+    generationId: str(formData, "generation_id"),
+    projectId: str(formData, "project_id"),
+  });
+  if ("ok" in result && result.ok) return { success: true };
+  return result;
+}
+
 export async function trackConnectClickedAction(
   _prev: unknown,
   formData: FormData,
@@ -1521,10 +1741,12 @@ export async function submitBathroomLeadAction(
   const zipCode = str(formData, "zip_code").slice(0, 20);
   const timeline = str(formData, "timeline").slice(0, 60);
   const budgetRange = str(formData, "budget_range").slice(0, 60);
+  const preferredContactMethod = str(formData, "preferred_contact_method").slice(0, 40);
+  const bestContactTime = str(formData, "best_contact_time").slice(0, 40);
   const notes = str(formData, "project_notes").slice(0, 2000);
 
   if (!generationId || !selectedStyle) return { error: "Missing generation details." };
-  if (!name || !email || !phone || !zipCode || !timeline || !budgetRange) {
+  if (!name || !email || !phone || !zipCode || !timeline || !budgetRange || !preferredContactMethod) {
     return { error: "Please complete all required fields." };
   }
 
@@ -1538,6 +1760,8 @@ export async function submitBathroomLeadAction(
     zip_code: zipCode,
     timeline,
     budget_range: budgetRange,
+    preferred_contact_method: preferredContactMethod,
+    best_contact_time: bestContactTime || null,
     project_notes: notes || null,
     selected_style: selectedStyle,
     estimate_min: estimateMin,

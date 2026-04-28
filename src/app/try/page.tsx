@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { loadHomeownerTryPageState } from "@/lib/actions/homeowner-try";
+import { loadHomeownerTryPageState, loadTryGenerationForViewer, saveMyProjectForViewer } from "@/lib/actions/homeowner-try";
 import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client";
 import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
+import { createClient } from "@/lib/supabase/server";
+import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +14,35 @@ export const metadata = {
   title: "Try your remodel preview",
 };
 
-export default async function RenovisionTryPage() {
+export default async function RenovisionTryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ restore_generation_id?: string; restore_project_id?: string; auto_save_project?: string }>;
+}) {
+  const sp = await searchParams;
   const state = await loadHomeownerTryPageState();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const showAdminNav = user
+    ? await resolveViewerIsAdmin({ userId: user.id, email: user.email })
+    : false;
+  const restoredGeneration = sp.restore_generation_id && sp.restore_project_id
+    ? await loadTryGenerationForViewer({
+        generationId: sp.restore_generation_id,
+        projectId: sp.restore_project_id,
+      })
+    : null;
+  const autoSavedProject =
+    restoredGeneration &&
+    user &&
+    sp.auto_save_project === "1"
+      ? await saveMyProjectForViewer({
+          generationId: restoredGeneration.generationId,
+          projectId: restoredGeneration.projectId,
+        }).then((r) => "success" in r && r.success)
+      : false;
 
   if (!state.ok) {
     return (
@@ -41,12 +70,19 @@ export default async function RenovisionTryPage() {
             <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
               Renovision
             </Link>
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
-            >
-              ← Home
-            </Link>
+            <div className="flex items-center gap-3 text-sm">
+              {showAdminNav ? (
+                <Link href="/admin" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                  Admin Dashboard
+                </Link>
+              ) : null}
+              <Link
+                href="/"
+                className="text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
+              >
+                ← Home
+              </Link>
+            </div>
           </div>
         </header>
         <TryAnonSessionBootstrap />
@@ -62,6 +98,16 @@ export default async function RenovisionTryPage() {
             Renovision
           </Link>
           <div className="flex items-center gap-3 text-sm">
+            {showAdminNav ? (
+              <Link href="/admin" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                Admin Dashboard
+              </Link>
+            ) : null}
+            {user ? (
+              <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                My Projects
+              </Link>
+            ) : null}
             <Link
               href="/"
               className="text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
@@ -80,7 +126,7 @@ export default async function RenovisionTryPage() {
           </div>
         </div>
       </header>
-      <HomeownerTryClient initial={state} />
+      <HomeownerTryClient initial={state} restoredGeneration={restoredGeneration} autoSavedProject={autoSavedProject} />
     </div>
   );
 }

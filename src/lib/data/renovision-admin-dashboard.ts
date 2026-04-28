@@ -132,6 +132,15 @@ export type RenovisionAdminProjectRow = {
   remodelerRequested: boolean;
 };
 
+export type RenovisionAdminMockupRow = {
+  mockupId: string;
+  projectId: string;
+  createdAt: string;
+  generationNumber: number;
+  ownerType: "user" | "guest" | "unknown";
+  ownerId: string | null;
+};
+
 async function countRows(
   table: string,
   opts: { fromIso: string | null; column?: string },
@@ -587,5 +596,81 @@ export async function fetchRenovisionAdminProjectsTable(
       r.projectId.toLowerCase().includes(sq) ||
       (r.userId && r.userId.toLowerCase().includes(sq)) ||
       (r.anonymousSessionId && r.anonymousSessionId.toLowerCase().includes(sq)),
+  );
+}
+
+export async function fetchRenovisionAdminMockupsTable(
+  range: RenovisionAdminRange,
+  search: string,
+): Promise<RenovisionAdminMockupRow[]> {
+  const svc = createServiceClient();
+  const fromIso = rangeLowerBoundIso(range);
+  let q = svc
+    .from("homeowner_try_mockups")
+    .select("id, project_id, created_at, mockup_generation")
+    .order("created_at", { ascending: false })
+    .limit(800);
+  if (fromIso) q = q.gte("created_at", fromIso);
+  const { data: mockups, error } = await q;
+  if (error) throw new Error(error.message);
+
+  const projectIds = [...new Set((mockups ?? []).map((m) => String(m.project_id)))];
+  const { data: projects, error: pErr } = projectIds.length
+    ? await svc
+        .from("homeowner_try_projects")
+        .select("id, user_id, anonymous_session_id")
+        .in("id", projectIds)
+    : { data: [], error: null };
+  if (pErr) throw new Error(pErr.message);
+
+  const projectOwnerById = new Map(
+    (projects ?? []).map((p) => [
+      String(p.id),
+      {
+        userId: (p.user_id as string | null) ?? null,
+        guestId: (p.anonymous_session_id as string | null) ?? null,
+      },
+    ]),
+  );
+
+  const rows: RenovisionAdminMockupRow[] = (mockups ?? []).map((m) => {
+    const owner = projectOwnerById.get(String(m.project_id));
+    if (owner?.userId) {
+      return {
+        mockupId: String(m.id),
+        projectId: String(m.project_id),
+        createdAt: String(m.created_at),
+        generationNumber: Number(m.mockup_generation ?? 0),
+        ownerType: "user",
+        ownerId: owner.userId,
+      };
+    }
+    if (owner?.guestId) {
+      return {
+        mockupId: String(m.id),
+        projectId: String(m.project_id),
+        createdAt: String(m.created_at),
+        generationNumber: Number(m.mockup_generation ?? 0),
+        ownerType: "guest",
+        ownerId: owner.guestId,
+      };
+    }
+    return {
+      mockupId: String(m.id),
+      projectId: String(m.project_id),
+      createdAt: String(m.created_at),
+      generationNumber: Number(m.mockup_generation ?? 0),
+      ownerType: "unknown",
+      ownerId: null,
+    };
+  });
+
+  const sq = search.trim().toLowerCase();
+  if (!sq) return rows;
+  return rows.filter(
+    (r) =>
+      r.mockupId.toLowerCase().includes(sq) ||
+      r.projectId.toLowerCase().includes(sq) ||
+      (r.ownerId && r.ownerId.toLowerCase().includes(sq)),
   );
 }

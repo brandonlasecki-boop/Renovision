@@ -7,6 +7,7 @@ import {
   fetchRenovisionAdminFunnel,
   fetchRenovisionAdminOverview,
   fetchRenovisionAdminProjectsTable,
+  fetchRenovisionAdminMockupsTable,
   fetchRenovisionAdminTrends,
   fetchRenovisionAdminUsersTable,
   parseRenovisionAdminRange,
@@ -98,6 +99,7 @@ export default async function RenovisionAdminPage({
   let users: Awaited<ReturnType<typeof fetchRenovisionAdminUsersTable>> = [];
   let sessions: Awaited<ReturnType<typeof fetchRenovisionAdminAnonSessionsTable>> = [];
   let projects: Awaited<ReturnType<typeof fetchRenovisionAdminProjectsTable>> = [];
+  let mockups: Awaited<ReturnType<typeof fetchRenovisionAdminMockupsTable>> = [];
 
   try {
     [
@@ -118,6 +120,7 @@ export default async function RenovisionAdminPage({
       fetchRenovisionAdminUsersTable(range, q),
       fetchRenovisionAdminAnonSessionsTable(range, q),
       fetchRenovisionAdminProjectsTable(range, q),
+      fetchRenovisionAdminMockupsTable(range, q),
     ]);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Renovision analytics.";
@@ -445,6 +448,48 @@ export default async function RenovisionAdminPage({
                         <td className="px-4 py-2 tabular-nums">{p.initialCount}</td>
                         <td className="px-4 py-2 tabular-nums">{p.regenCount}</td>
                         <td className="px-4 py-2">{p.remodelerRequested ? "Yes" : "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
+              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
+                All mockups (user + guest)
+              </h3>
+              <table className="w-full min-w-[980px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    <th className="px-4 py-2 font-medium">Created</th>
+                    <th className="px-4 py-2 font-medium">Mockup</th>
+                    <th className="px-4 py-2 font-medium">Project</th>
+                    <th className="px-4 py-2 font-medium">Generation</th>
+                    <th className="px-4 py-2 font-medium">Owner type</th>
+                    <th className="px-4 py-2 font-medium">Owner id</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mockups.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-6 text-muted-foreground">
+                        No mockups found.
+                      </td>
+                    </tr>
+                  ) : (
+                    mockups.map((m) => (
+                      <tr key={m.mockupId} className="border-b border-border/40 last:border-0">
+                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                          {new Date(m.createdAt).toLocaleString()}
+                        </td>
+                        <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs">{m.mockupId}</td>
+                        <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs">{m.projectId}</td>
+                        <td className="px-4 py-2 tabular-nums">v{m.generationNumber}</td>
+                        <td className="px-4 py-2">{m.ownerType}</td>
+                        <td className="max-w-[220px] truncate px-4 py-2 font-mono text-xs text-muted-foreground">
+                          {m.ownerId ?? "—"}
+                        </td>
                       </tr>
                     ))
                   )}
