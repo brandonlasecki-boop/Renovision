@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { PHOTOS_BUCKET } from "@/lib/supabase/constants";
 import { sanitizeAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
 
 export type RenovisionAdminRange = "7d" | "30d" | "all";
@@ -150,6 +151,51 @@ export type RenovisionAttributionAdminRow = {
   platform: string;
   campaign: string;
   video: string;
+};
+
+export type RenovisionSessionDrilldown = {
+  sessionId: string;
+  createdAt: string;
+  updatedAt: string;
+  initialGenerationsUsed: number;
+  regenerationsUsed: number;
+  attribution: RenovisionAttribution | null;
+  projects: Array<{
+    id: string;
+    createdAt: string;
+    userId: string | null;
+    roomKind: string;
+    convertedAt: string | null;
+  }>;
+  generations: Array<{
+    id: string;
+    createdAt: string;
+    projectId: string | null;
+    selectedStyle: string;
+    leadSubmitted: boolean;
+    beforeImageUrl: string | null;
+    afterImageUrl: string | null;
+  }>;
+  leads: Array<{
+    id: string;
+    createdAt: string;
+    generationId: string | null;
+    email: string;
+    zipCode: string;
+  }>;
+  events: Array<{
+    id: string;
+    occurredAt: string;
+    eventType: string;
+    projectId: string | null;
+  }>;
+  mockups: Array<{
+    id: string;
+    projectId: string;
+    generationNumber: number;
+    createdAt: string;
+    imageUrl: string | null;
+  }>;
 };
 
 async function countRows(
@@ -753,4 +799,135 @@ export async function fetchRecentAttributionRows(limit = 100): Promise<Renovisio
   }
 
   return rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, limit);
+}
+
+export async function fetchRenovisionSessionDrilldown(
+  sessionId: string,
+): Promise<RenovisionSessionDrilldown | null> {
+  const id = sessionId.trim();
+  if (!id) return null;
+  const svc = createServiceClient();
+
+  const { data: session, error: sessionError } = await svc
+    .from("renovision_anonymous_sessions")
+    .select("id, created_at, updated_at, initial_generations_used, regenerations_used, attribution")
+    .eq("id", id)
+    .maybeSingle();
+  if (sessionError) throw new Error(sessionError.message);
+  if (!session) return null;
+
+  const [{ data: projects, error: projectsError }, { data: generations, error: generationsError }, { data: events, error: eventsError }] =
+    await Promise.all([
+      svc
+        .from("homeowner_try_projects")
+        .select("id, created_at, user_id, room_kind, anon_converted_at")
+        .or(`anonymous_session_id.eq.${id},converted_from_anon_session_id.eq.${id}`)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      svc
+        .from("bathroom_generations")
+        .select("id, created_at, project_id, selected_style, lead_submitted, uploaded_image_url, generated_image_url")
+        .eq("session_id", id)
+        .order("created_at", { ascending: false })
+        .limit(200),
+      svc
+        .from("renovision_analytics_events")
+        .select("id, occurred_at, event_type, project_id")
+        .eq("anonymous_session_id", id)
+        .order("occurred_at", { ascending: false })
+        .limit(400),
+    ]);
+  if (projectsError) throw new Error(projectsError.message);
+  if (generationsError) throw new Error(generationsError.message);
+  if (eventsError) throw new Error(eventsError.message);
+
+  const generationIds = (generations ?? []).map((g) => String(g.id));
+  const { data: leads, error: leadsError } = generationIds.length
+    ? await svc
+        .from("leads")
+        .select("id, created_at, generation_id, email, zip_code")
+        .in("generation_id", generationIds)
+        .order("created_at", { ascending: false })
+        .limit(200)
+    : { data: [], error: null };
+  if (leadsError) throw new Error(leadsError.message);
+
+  const projectIds = [...new Set((projects ?? []).map((p) => String(p.id)))];
+  const { data: mockups, error: mockupsError } = projectIds.length
+    ? await svc
+        .from("homeowner_try_mockups")
+        .select("id, project_id, mockup_generation, created_at, storage_path")
+        .in("project_id", projectIds)
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [], error: null };
+  if (mockupsError) throw new Error(mockupsError.message);
+
+  const signedBeforeByGenerationId = new Map<string, string>();
+  const signedAfterByGenerationId = new Map<string, string>();
+  for (const g of generations ?? []) {
+    const genId = String(g.id);
+    const beforePath = String((g as { uploaded_image_url?: unknown }).uploaded_image_url ?? "").trim();
+    const afterPath = String((g as { generated_image_url?: unknown }).generated_image_url ?? "").trim();
+    if (beforePath) {
+      const beforeSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(beforePath, 60 * 60);
+      if (beforeSigned.data?.signedUrl) signedBeforeByGenerationId.set(genId, beforeSigned.data.signedUrl);
+    }
+    if (afterPath) {
+      const afterSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(afterPath, 60 * 60);
+      if (afterSigned.data?.signedUrl) signedAfterByGenerationId.set(genId, afterSigned.data.signedUrl);
+    }
+  }
+  const signedMockupById = new Map<string, string>();
+  for (const m of mockups ?? []) {
+    const path = String((m as { storage_path?: unknown }).storage_path ?? "").trim();
+    if (!path) continue;
+    const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(path, 60 * 60);
+    if (signed.data?.signedUrl) signedMockupById.set(String(m.id), signed.data.signedUrl);
+  }
+
+  return {
+    sessionId: String(session.id),
+    createdAt: String(session.created_at),
+    updatedAt: String(session.updated_at),
+    initialGenerationsUsed: Number(session.initial_generations_used ?? 0),
+    regenerationsUsed: Number(session.regenerations_used ?? 0),
+    attribution: sanitizeAttribution((session as { attribution?: unknown }).attribution ?? null),
+    projects: (projects ?? []).map((p) => ({
+      id: String(p.id),
+      createdAt: String(p.created_at),
+      userId: (p.user_id as string | null) ?? null,
+      roomKind: String((p as { room_kind?: string }).room_kind ?? "bathroom"),
+      convertedAt: (p.anon_converted_at as string | null) ?? null,
+    })),
+    generations: (generations ?? []).map((g) => ({
+      id: String(g.id),
+      createdAt: String(g.created_at),
+      projectId: (g.project_id as string | null) ?? null,
+      selectedStyle: String(g.selected_style ?? ""),
+      leadSubmitted: Boolean(g.lead_submitted),
+      beforeImageUrl: signedBeforeByGenerationId.get(String(g.id)) ?? null,
+      afterImageUrl: signedAfterByGenerationId.get(String(g.id)) ?? null,
+    })),
+    leads: (leads ?? []).map((l) => ({
+      id: String(l.id),
+      createdAt: String(l.created_at),
+      generationId: (l.generation_id as string | null) ?? null,
+      email: String(l.email ?? ""),
+      zipCode: String(l.zip_code ?? ""),
+    })),
+    events: (events ?? []).map((e) => ({
+      id: String(e.id),
+      occurredAt: String(e.occurred_at),
+      eventType: String(e.event_type ?? ""),
+      projectId: (e.project_id as string | null) ?? null,
+    })),
+    mockups: (mockups ?? []).map((m) => ({
+      id: String(m.id),
+      projectId: String(m.project_id),
+      generationNumber: Number(m.mockup_generation ?? 0),
+      createdAt: String(m.created_at),
+      imageUrl: signedMockupById.get(String(m.id)) ?? null,
+    })),
+  };
 }

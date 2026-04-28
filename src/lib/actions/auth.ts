@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { resolveAppOrigin } from "@/lib/app-origin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -45,7 +46,7 @@ export async function signUp(
   const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
   const nextPath =
     nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const base = await resolveAppOrigin();
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -93,7 +94,7 @@ export async function sendMagicLink(
     nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
   if (!email) return { error: "Email is required." };
 
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const base = await resolveAppOrigin();
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
