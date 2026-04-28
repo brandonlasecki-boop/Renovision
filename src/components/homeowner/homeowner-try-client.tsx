@@ -195,10 +195,12 @@ export function HomeownerTryClient({
   initial,
   restoredGeneration = null,
   autoSavedProject = false,
+  startNewProject = false,
 }: {
   initial: Exclude<HomeownerTryPageState, { ok: false }>;
   restoredGeneration?: TryGenerationViewState | null;
   autoSavedProject?: boolean;
+  startNewProject?: boolean;
 }) {
   const [selectedStyle, setSelectedStyle] = useState<(typeof BATHROOM_STYLES)[number]["id"] | null>(null);
   const [userDescription, setUserDescription] = useState("");
@@ -657,6 +659,7 @@ export function HomeownerTryClient({
             <input type="hidden" name="selected_style" value={selectedStyle ?? ""} />
             <input type="hidden" name="user_description" value={userDescription} />
             <input type="hidden" name="attribution_json" value={attributionJson} />
+            <input type="hidden" name="start_new_project" value={startNewProject ? "1" : "0"} />
             <div>
               <p className="text-xl font-semibold">Upload your bathroom photo</p>
               <p className="text-sm text-muted-foreground">We&apos;ll redesign it in the style you picked.</p>

@@ -5,6 +5,7 @@ import {
   loadTryGenerationForViewer,
   saveMyProjectForViewer,
 } from "@/lib/actions/homeowner-try";
+import { signOut } from "@/lib/actions/auth";
 import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client";
 import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
 import { createClient } from "@/lib/supabase/server";
@@ -136,16 +137,32 @@ export default async function RenovisionTryPage({
             {state.userEmail ? (
               <span className="hidden text-muted-foreground sm:inline">{state.userEmail}</span>
             ) : null}
-            <Link
-              href="/login?next=/try"
-              className="text-muted-foreground transition hover:text-foreground"
-            >
-              Log in
-            </Link>
+            {user ? (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
+                >
+                  Log out
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/login?next=/try"
+                className="text-muted-foreground transition hover:text-foreground"
+              >
+                Log in
+              </Link>
+            )}
           </div>
         </div>
       </header>
-      <HomeownerTryClient initial={state} restoredGeneration={restoredGeneration} autoSavedProject={autoSavedProject} />
+      <HomeownerTryClient
+        initial={state}
+        restoredGeneration={restoredGeneration}
+        autoSavedProject={autoSavedProject}
+        startNewProject={forceNew}
+      />
     </div>
   );
 }

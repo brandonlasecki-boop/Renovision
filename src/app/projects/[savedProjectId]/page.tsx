@@ -21,6 +21,12 @@ export default async function SavedProjectDetailPage({
   const project = await loadViewerSavedProject(savedProjectId);
   if (!project) notFound();
 
+  const tryHref =
+    project.generationId && project.projectId
+      ? `/try?restore_generation_id=${encodeURIComponent(project.generationId)}&restore_project_id=${encodeURIComponent(project.projectId)}`
+      : "/try?new=1";
+  redirect(tryHref);
+
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="border-b border-border/60 bg-background/85 backdrop-blur">

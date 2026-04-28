@@ -22,7 +22,7 @@ export default async function MyProjectsPage() {
           <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
             Renovision
           </Link>
-          <Link href="/try" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          <Link href="/try?new=1" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
             Start new design
           </Link>
         </div>
@@ -58,8 +58,11 @@ export default async function MyProjectsPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <Link href={`/projects/${p.id}`} className={buttonVariants({ variant: "outline" })}>
-                      View Project
+                    <Link
+                      href={`/try?restore_generation_id=${encodeURIComponent(p.generationId ?? "")}&restore_project_id=${encodeURIComponent(p.projectId)}`}
+                      className={buttonVariants({ variant: "outline" })}
+                    >
+                      View My Project
                     </Link>
                     <Link
                       href={`/try?restore_generation_id=${encodeURIComponent(p.generationId ?? "")}&restore_project_id=${encodeURIComponent(p.projectId)}`}
@@ -67,7 +70,10 @@ export default async function MyProjectsPage() {
                     >
                       Try Another Style
                     </Link>
-                    <Link href={`/projects/${p.id}#connect`} className={buttonVariants()}>
+                    <Link
+                      href={`/try?restore_generation_id=${encodeURIComponent(p.generationId ?? "")}&restore_project_id=${encodeURIComponent(p.projectId)}`}
+                      className={buttonVariants()}
+                    >
                       Connect Me
                     </Link>
                   </div>

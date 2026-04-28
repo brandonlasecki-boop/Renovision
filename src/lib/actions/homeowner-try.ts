@@ -999,6 +999,7 @@ export async function generateBathroomMockupAction(
       activeMockupId: string;
     }
 > {
+  const startNewProject = str(formData, "start_new_project") === "1";
   const selectedStyleId = str(formData, "selected_style");
   const userDescription = String(formData.get("user_description") ?? "").trim().slice(0, 1600);
   const style = getBathroomStyleById(selectedStyleId);
@@ -1019,10 +1020,15 @@ export async function generateBathroomMockupAction(
   const incomingAttribution = attributionFromFormData(formData);
   await persistViewerAttribution({ viewer, attribution: incomingAttribution });
 
-  const existingProject = await findHomeownerTryProjectForContext({
-    userId: viewer.userId,
-    anonymousSessionId: viewer.anonymousSessionId,
-  });
+  // Logged-in flow: every fresh upload should create a distinct project timeline.
+  // Anonymous flow can still reuse context unless "start new" is explicitly requested.
+  const shouldForceNewProject = startNewProject || Boolean(viewer.userId);
+  const existingProject = shouldForceNewProject
+    ? null
+    : await findHomeownerTryProjectForContext({
+        userId: viewer.userId,
+        anonymousSessionId: viewer.anonymousSessionId,
+      });
   const projectId = existingProject?.id ?? randomUUID();
   const svc = createServiceClient();
 
