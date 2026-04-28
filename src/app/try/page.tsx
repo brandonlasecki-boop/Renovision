@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { loadHomeownerTryPageState, loadTryGenerationForViewer, saveMyProjectForViewer } from "@/lib/actions/homeowner-try";
+import {
+  loadHomeownerTryPageState,
+  loadLatestTryGenerationForViewer,
+  loadTryGenerationForViewer,
+  saveMyProjectForViewer,
+} from "@/lib/actions/homeowner-try";
 import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client";
 import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +22,12 @@ export const metadata = {
 export default async function RenovisionTryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ restore_generation_id?: string; restore_project_id?: string; auto_save_project?: string }>;
+  searchParams: Promise<{
+    restore_generation_id?: string;
+    restore_project_id?: string;
+    auto_save_project?: string;
+    new?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const state = await loadHomeownerTryPageState();
@@ -28,12 +38,16 @@ export default async function RenovisionTryPage({
   const showAdminNav = user
     ? await resolveViewerIsAdmin({ userId: user.id, email: user.email })
     : false;
-  const restoredGeneration = sp.restore_generation_id && sp.restore_project_id
+  const explicitRestore = sp.restore_generation_id && sp.restore_project_id;
+  const forceNew = sp.new === "1";
+  const restoredGeneration = explicitRestore
     ? await loadTryGenerationForViewer({
-        generationId: sp.restore_generation_id,
-        projectId: sp.restore_project_id,
+        generationId: sp.restore_generation_id!,
+        projectId: sp.restore_project_id!,
       })
-    : null;
+    : !forceNew && user
+      ? await loadLatestTryGenerationForViewer()
+      : null;
   const autoSavedProject =
     restoredGeneration &&
     user &&
@@ -104,9 +118,14 @@ export default async function RenovisionTryPage({
               </Link>
             ) : null}
             {user ? (
-              <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
-                My Projects
-              </Link>
+              <>
+                <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                  My Projects
+                </Link>
+                <Link href="/try?new=1" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                  Start New
+                </Link>
+              </>
             ) : null}
             <Link
               href="/"

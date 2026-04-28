@@ -1191,6 +1191,18 @@ export async function generateBathroomMockupAction(
     metadata: { selected_style: style.id, generation_id: generationId },
   });
 
+  // Logged-in users should always have their latest project available in My Projects.
+  if (viewer.userId) {
+    const autoSaveResult = await saveMyProjectForViewerCore({
+      generationId,
+      projectId,
+      attribution: incomingAttribution,
+    });
+    if (!("ok" in autoSaveResult)) {
+      console.warn("[renovision][auto-save] generation auto-save failed", autoSaveResult);
+    }
+  }
+
   const versionTtl = 60 * 60;
   const mockupVersions = await loadSignedMockupVersionsForProject(projectId, versionTtl);
   const finalRows = await listMockupsForHomeownerProject(projectId);
@@ -1492,6 +1504,18 @@ export async function regenerateBathroomMockupAction(
     metadata: { mode: "regenerate", generation_id: generationId },
   });
 
+  // Logged-in users should always have their latest project available in My Projects.
+  if (viewer.userId) {
+    const autoSaveResult = await saveMyProjectForViewerCore({
+      generationId,
+      projectId,
+      attribution: incomingAttribution,
+    });
+    if (!("ok" in autoSaveResult)) {
+      console.warn("[renovision][auto-save] regenerate auto-save failed", autoSaveResult);
+    }
+  }
+
   revalidatePath("/try");
   return {
     success: true,
@@ -1690,6 +1714,39 @@ export async function loadTryGenerationForViewer(params: {
   };
 }
 
+export async function loadLatestTryGenerationForViewer(): Promise<TryGenerationViewState | null> {
+  const viewer = await getViewerContext(false);
+  const svc = createServiceClient();
+
+  let generationId = "";
+  let projectId = "";
+
+  if (viewer.userId) {
+    const { data: latest } = await svc
+      .from("bathroom_generations")
+      .select("id, project_id")
+      .eq("user_id", viewer.userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    generationId = String(latest?.id ?? "").trim();
+    projectId = String(latest?.project_id ?? "").trim();
+  } else if (viewer.anonymousSessionId) {
+    const { data: latest } = await svc
+      .from("bathroom_generations")
+      .select("id, project_id")
+      .eq("session_id", viewer.anonymousSessionId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    generationId = String(latest?.id ?? "").trim();
+    projectId = String(latest?.project_id ?? "").trim();
+  }
+
+  if (!generationId || !projectId) return null;
+  return loadTryGenerationForViewer({ generationId, projectId });
+}
+
 async function saveMyProjectForViewerCore(params: {
   generationId: string;
   projectId: string;
@@ -1702,6 +1759,7 @@ async function saveMyProjectForViewerCore(params: {
       loginPath: string;
       signupPath: string;
       magicLinkPath: string;
+      googlePath: string;
     }
 > {
   const generationId = params.generationId.trim();
@@ -1716,6 +1774,7 @@ async function saveMyProjectForViewerCore(params: {
       loginPath: `/login?next=${encodeURIComponent(nextPath)}`,
       signupPath: `/signup?next=${encodeURIComponent(nextPath)}`,
       magicLinkPath: `/auth/magic-link?next=${encodeURIComponent(nextPath)}`,
+      googlePath: `/auth/google/start?next=${encodeURIComponent(nextPath)}`,
     };
   }
 
@@ -1788,7 +1847,7 @@ export async function saveMyProjectForViewer(params: {
 }): Promise<
   | { success: true }
   | { error: string }
-  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
 > {
   const res = await saveMyProjectForViewerCore({
     generationId: params.generationId,
@@ -1805,7 +1864,7 @@ export async function saveMyProjectAction(
 ): Promise<
   | { error: string }
   | { success: true }
-  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
 > {
   const result = await saveMyProjectForViewerCore({
     generationId: str(formData, "generation_id"),

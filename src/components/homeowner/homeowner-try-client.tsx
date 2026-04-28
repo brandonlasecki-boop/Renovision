@@ -41,6 +41,7 @@ const usd = new Intl.NumberFormat("en-US", {
   currency: "USD",
   maximumFractionDigits: 0,
 });
+const MAX_SAFE_PREVIEW_BYTES = 8 * 1024 * 1024;
 
 /** Approximate shift to total job midpoint vs current estimate; from estimator JSON. */
 function formatTweakImpactBand(s: TryTweakSuggestion): string {
@@ -72,6 +73,11 @@ function assignImageToFileInput(target: HTMLInputElement, file: File | undefined
   }
   target.dispatchEvent(new Event("input", { bubbles: true }));
   target.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/** Very large phone photos can crash mobile Chrome when decoded for client-side preview. */
+function previewAllowed(file: File | undefined | null): file is File {
+  return Boolean(file && file.size <= MAX_SAFE_PREVIEW_BYTES);
 }
 
 /** Left side of compare — display only; does not change which mockup edits/regen use. */
@@ -681,7 +687,18 @@ export function HomeownerTryClient({
                 className="sr-only"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  setFirstUploadPreviewUrl(file ? URL.createObjectURL(file) : null);
+                  if (!file) {
+                    setFirstUploadPreviewUrl(null);
+                    return;
+                  }
+                  if (!previewAllowed(file)) {
+                    setFirstUploadPreviewUrl(null);
+                    toast.message("Photo selected", {
+                      description: "Preview skipped for very large image to keep mobile stable.",
+                    });
+                    return;
+                  }
+                  setFirstUploadPreviewUrl(URL.createObjectURL(file));
                 }}
               />
               <input
@@ -1052,6 +1069,24 @@ export function HomeownerTryClient({
                 >
                   Try Another Style
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl sm:w-auto"
+                  onClick={() => {
+                    setGeneration(null);
+                    setSelectedStyle(null);
+                    setUserDescription("");
+                    setLeadSubmitted(false);
+                    setLeadOpen(false);
+                    setSaveModalOpen(false);
+                    setQuickStyleSwitchMode(false);
+                    setCompareBeforeSelection("original");
+                    setStep("style");
+                  }}
+                >
+                  Start New Project
+                </Button>
                 <form action={saveAction} className="w-full sm:w-auto">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
@@ -1191,12 +1226,6 @@ export function HomeownerTryClient({
               Create a free account so you can come back to your bathroom, styles, estimates, and remodel request later.
             </p>
             <div className="mt-4 space-y-2">
-              <a
-                href={authSaveState.googlePath}
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm font-semibold"
-              >
-                Save My Project with Google
-              </a>
               <a
                 href={authSaveState.magicLinkPath}
                 className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white"
