@@ -1677,7 +1677,9 @@ export async function loadTryGenerationForViewer(params: {
   if (!project) return null;
 
   const canView =
-    (viewer.userId && project.user_id === viewer.userId) ||
+    // Post-signup restore links can target a guest project. Allow logged-in viewers
+    // to load unclaimed projects so `auto_save_project=1` can claim/save them.
+    (viewer.userId && (project.user_id === viewer.userId || project.user_id == null)) ||
     (!viewer.userId && viewer.anonymousSessionId && project.anonymous_session_id === viewer.anonymousSessionId);
   if (!canView) return null;
 
