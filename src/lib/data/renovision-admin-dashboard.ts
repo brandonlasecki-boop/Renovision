@@ -214,6 +214,18 @@ export type RenovisionSessionDrilldown = {
   }>;
 };
 
+export type RenovisionMarketingDailyRow = {
+  day: string;
+  linkId: string;
+  platform: string;
+  campaign: string;
+  video: string;
+  sessions: number;
+  generations: number;
+  saves: number;
+  leads: number;
+};
+
 async function countRows(
   table: string,
   opts: { fromIso: string | null; column?: string },
@@ -1016,4 +1028,122 @@ export async function fetchRenovisionAdminLeadsTable(
       (r.projectId ?? "").toLowerCase().includes(sq) ||
       (r.generationId ?? "").toLowerCase().includes(sq),
   );
+}
+
+function dayKey(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function pickAttributionDims(a: RenovisionAttribution | null): {
+  linkId: string;
+  platform: string;
+  campaign: string;
+  video: string;
+} {
+  const linkId = (a?.src ?? a?.source ?? "—").trim() || "—";
+  const platform = (a?.platform ?? a?.source ?? a?.src ?? "—").trim() || "—";
+  const campaign = (a?.campaign ?? "—").trim() || "—";
+  const video = (a?.video ?? a?.v ?? "—").trim() || "—";
+  return { linkId, platform, campaign, video };
+}
+
+export async function fetchRenovisionMarketingDailyRows(
+  range: RenovisionAdminRange,
+): Promise<RenovisionMarketingDailyRow[]> {
+  const svc = createServiceClient();
+  const fromIso = rangeLowerBoundIso(range);
+
+  let sessionsQ = svc
+    .from("renovision_anonymous_sessions")
+    .select("id, created_at, updated_at, attribution")
+    .order("updated_at", { ascending: false })
+    .limit(1000);
+  let generationsQ = svc
+    .from("bathroom_generations")
+    .select("id, created_at, attribution")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  let savesQ = svc
+    .from("renovision_saved_projects")
+    .select("id, created_at, attribution")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  let leadsQ = svc
+    .from("leads")
+    .select("id, created_at, attribution")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  if (fromIso) {
+    sessionsQ = sessionsQ.gte("updated_at", fromIso);
+    generationsQ = generationsQ.gte("created_at", fromIso);
+    savesQ = savesQ.gte("created_at", fromIso);
+    leadsQ = leadsQ.gte("created_at", fromIso);
+  }
+
+  const [sessionsRes, generationsRes, savesRes, leadsRes] = await Promise.all([
+    sessionsQ,
+    generationsQ,
+    savesQ,
+    leadsQ,
+  ]);
+  if (sessionsRes.error) throw new Error(sessionsRes.error.message);
+  if (generationsRes.error) throw new Error(generationsRes.error.message);
+  if (savesRes.error) throw new Error(savesRes.error.message);
+  if (leadsRes.error) throw new Error(leadsRes.error.message);
+
+  const agg = new Map<string, RenovisionMarketingDailyRow>();
+  const ensure = (day: string, linkId: string, platform: string, campaign: string, video: string) => {
+    const k = `${day}|${linkId}|${platform}|${campaign}|${video}`;
+    const existing = agg.get(k);
+    if (existing) return existing;
+    const row: RenovisionMarketingDailyRow = {
+      day,
+      linkId,
+      platform,
+      campaign,
+      video,
+      sessions: 0,
+      generations: 0,
+      saves: 0,
+      leads: 0,
+    };
+    agg.set(k, row);
+    return row;
+  };
+
+  for (const r of sessionsRes.data ?? []) {
+    const dims = pickAttributionDims(sanitizeAttribution((r as { attribution?: unknown }).attribution ?? null));
+    if (dims.linkId === "—") continue;
+    const activityAt = String((r as { updated_at?: unknown }).updated_at ?? (r as { created_at?: unknown }).created_at ?? "");
+    if (!activityAt) continue;
+    const row = ensure(dayKey(activityAt), dims.linkId, dims.platform, dims.campaign, dims.video);
+    row.sessions += 1;
+  }
+  for (const r of generationsRes.data ?? []) {
+    const dims = pickAttributionDims(sanitizeAttribution((r as { attribution?: unknown }).attribution ?? null));
+    if (dims.linkId === "—") continue;
+    const row = ensure(dayKey(String(r.created_at)), dims.linkId, dims.platform, dims.campaign, dims.video);
+    row.generations += 1;
+  }
+  for (const r of savesRes.data ?? []) {
+    const dims = pickAttributionDims(sanitizeAttribution((r as { attribution?: unknown }).attribution ?? null));
+    if (dims.linkId === "—") continue;
+    const row = ensure(dayKey(String(r.created_at)), dims.linkId, dims.platform, dims.campaign, dims.video);
+    row.saves += 1;
+  }
+  for (const r of leadsRes.data ?? []) {
+    const dims = pickAttributionDims(sanitizeAttribution((r as { attribution?: unknown }).attribution ?? null));
+    if (dims.linkId === "—") continue;
+    const row = ensure(dayKey(String(r.created_at)), dims.linkId, dims.platform, dims.campaign, dims.video);
+    row.leads += 1;
+  }
+
+  return [...agg.values()].sort((a, b) => {
+    if (a.day !== b.day) return a.day < b.day ? 1 : -1;
+    if (a.linkId !== b.linkId) return a.linkId < b.linkId ? -1 : 1;
+    if (a.campaign !== b.campaign) return a.campaign < b.campaign ? -1 : 1;
+    if (a.platform !== b.platform) return a.platform < b.platform ? -1 : 1;
+    return a.video < b.video ? -1 : 1;
+  });
 }

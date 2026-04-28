@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MarketingLinkBuilder } from "@/components/admin/marketing-link-builder";
 
 import {
   fetchRenovisionActiveProjects,
@@ -8,6 +9,7 @@ import {
   fetchRecentAttributionRows,
   fetchRenovisionSessionDrilldown,
   fetchRenovisionAdminLeadsTable,
+  fetchRenovisionMarketingDailyRows,
   fetchRenovisionAdminOverview,
   fetchRenovisionAdminProjectsTable,
   fetchRenovisionAdminMockupsTable,
@@ -107,6 +109,7 @@ export default async function RenovisionAdminPage({
   let attributionRows: Awaited<ReturnType<typeof fetchRecentAttributionRows>> = [];
   let sessionDrilldown: Awaited<ReturnType<typeof fetchRenovisionSessionDrilldown>> = null;
   let leads: Awaited<ReturnType<typeof fetchRenovisionAdminLeadsTable>> = [];
+  let marketingDaily: Awaited<ReturnType<typeof fetchRenovisionMarketingDailyRows>> = [];
 
   try {
     [
@@ -122,6 +125,7 @@ export default async function RenovisionAdminPage({
       attributionRows,
       sessionDrilldown,
       leads,
+      marketingDaily,
     ] = await Promise.all([
       fetchRenovisionAdminOverview(range),
       fetchRenovisionAdminTrends(range),
@@ -135,6 +139,7 @@ export default async function RenovisionAdminPage({
       fetchRecentAttributionRows(120),
       sessionQuery ? fetchRenovisionSessionDrilldown(sessionQuery) : Promise.resolve(null),
       fetchRenovisionAdminLeadsTable(range, q),
+      fetchRenovisionMarketingDailyRows(range),
     ]);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Renovision analytics.";
@@ -325,6 +330,61 @@ export default async function RenovisionAdminPage({
           </section>
 
           <section className="space-y-3">
+            <MarketingLinkBuilder baseUrl="https://www.getrenovision.com" />
+
+            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
+              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
+                Daily link performance (per unique link id)
+              </h3>
+              <table className="w-full min-w-[980px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    <th className="px-4 py-2 font-medium">Day</th>
+                    <th className="px-4 py-2 font-medium">Link ID (src)</th>
+                    <th className="px-4 py-2 font-medium">Platform</th>
+                    <th className="px-4 py-2 font-medium">Campaign</th>
+                    <th className="px-4 py-2 font-medium">Video</th>
+                    <th className="px-4 py-2 font-medium">Sessions</th>
+                    <th className="px-4 py-2 font-medium">Generations</th>
+                    <th className="px-4 py-2 font-medium">Saves</th>
+                    <th className="px-4 py-2 font-medium">Leads</th>
+                    <th className="px-4 py-2 font-medium">Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {marketingDaily.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-6 text-muted-foreground">
+                        No attribution traffic yet for this range.
+                      </td>
+                    </tr>
+                  ) : (
+                    marketingDaily.map((r) => {
+                      const link = `https://www.getrenovision.com/?src=${encodeURIComponent(r.linkId)}&platform=${encodeURIComponent(r.platform)}&campaign=${encodeURIComponent(r.campaign)}&video=${encodeURIComponent(r.video)}`;
+                      return (
+                        <tr key={`${r.day}-${r.linkId}-${r.platform}-${r.campaign}-${r.video}`} className="border-b border-border/40 last:border-0">
+                          <td className="px-4 py-2">{r.day}</td>
+                          <td className="px-4 py-2 font-mono text-xs">{r.linkId}</td>
+                          <td className="px-4 py-2">{r.platform}</td>
+                          <td className="px-4 py-2">{r.campaign}</td>
+                          <td className="px-4 py-2">{r.video}</td>
+                          <td className="px-4 py-2 tabular-nums">{r.sessions}</td>
+                          <td className="px-4 py-2 tabular-nums">{r.generations}</td>
+                          <td className="px-4 py-2 tabular-nums">{r.saves}</td>
+                          <td className="px-4 py-2 tabular-nums">{r.leads}</td>
+                          <td className="px-4 py-2">
+                            <a href={link} target="_blank" rel="noreferrer" className="text-renovision-navy underline-offset-2 hover:underline">
+                              Open
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold tracking-tight">Tables</h2>
               <form className="flex w-full max-w-md gap-2" action="/admin/renovision" method="get">

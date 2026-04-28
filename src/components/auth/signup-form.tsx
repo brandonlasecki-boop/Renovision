@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { signUp } from "@/lib/actions/auth";
+import { resendConfirmationEmail, signUp } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import {
 
 export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
   const [state, formAction, pending] = useActionState(signUp, undefined);
+  const [resendState, resendAction, resendPending] = useActionState(resendConfirmationEmail, undefined);
 
   return (
     <Card className="border-border/80 shadow-sm">
@@ -45,9 +46,21 @@ export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
               <p className="mt-1.5 leading-relaxed text-muted-foreground">
                 We sent a link to{" "}
                 <span className="font-medium text-foreground">{state.email}</span>. Open it to activate your account,
-                then sign in here. If nothing arrives within a couple of minutes, check spam or your Supabase Auth
-                settings (confirm email / SMTP).
+                then sign in here. If nothing arrives within a couple of minutes, check spam or try again.
               </p>
+              <form action={resendAction} className="mt-3 flex items-center gap-2">
+                <input type="hidden" name="email" value={state.email} />
+                <input type="hidden" name="next" value={nextPath} />
+                <Button type="submit" variant="outline" size="sm" disabled={resendPending}>
+                  {resendPending ? "Sending…" : "Resend confirmation email"}
+                </Button>
+                {resendState && "success" in resendState && resendState.success ? (
+                  <span className="text-xs text-muted-foreground">Sent.</span>
+                ) : null}
+              </form>
+              {resendState && "error" in resendState && resendState.error ? (
+                <p className="mt-2 text-xs text-destructive">{resendState.error}</p>
+              ) : null}
             </div>
           ) : null}
           <div className="grid gap-2">

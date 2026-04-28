@@ -913,6 +913,27 @@ async function persistViewerAttribution(params: {
   }
 }
 
+/**
+ * Captures attribution immediately on marketing-link landing so admin metrics can show link usage
+ * even before a generation/save/lead action happens.
+ */
+export async function captureRenovisionAttributionAction(
+  incoming: unknown,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const attribution = sanitizeAttribution(incoming);
+    if (!attribution) return { ok: true };
+    const viewer = await getViewerContext(true);
+    await persistViewerAttribution({ viewer, attribution });
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not capture attribution.",
+    };
+  }
+}
+
 export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState> {
   try {
     const { userEmail, anonymousSessionId } = await getViewerContext(false);
@@ -1681,7 +1702,6 @@ async function saveMyProjectForViewerCore(params: {
       loginPath: string;
       signupPath: string;
       magicLinkPath: string;
-      googlePath: string;
     }
 > {
   const generationId = params.generationId.trim();
@@ -1696,7 +1716,6 @@ async function saveMyProjectForViewerCore(params: {
       loginPath: `/login?next=${encodeURIComponent(nextPath)}`,
       signupPath: `/signup?next=${encodeURIComponent(nextPath)}`,
       magicLinkPath: `/auth/magic-link?next=${encodeURIComponent(nextPath)}`,
-      googlePath: `/auth/google/start?next=${encodeURIComponent(nextPath)}`,
     };
   }
 
@@ -1769,7 +1788,7 @@ export async function saveMyProjectForViewer(params: {
 }): Promise<
   | { success: true }
   | { error: string }
-  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string }
 > {
   const res = await saveMyProjectForViewerCore({
     generationId: params.generationId,
@@ -1786,7 +1805,7 @@ export async function saveMyProjectAction(
 ): Promise<
   | { error: string }
   | { success: true }
-  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string; googlePath: string }
+  | { requiresAuth: true; loginPath: string; signupPath: string; magicLinkPath: string }
 > {
   const result = await saveMyProjectForViewerCore({
     generationId: str(formData, "generation_id"),
