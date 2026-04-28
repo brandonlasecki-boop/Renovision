@@ -8,7 +8,7 @@ export default async function SignupPage({
 }) {
   const sp = await searchParams;
   const nextPath =
-    sp.next?.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/dashboard";
+    sp.next?.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/projects";
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">

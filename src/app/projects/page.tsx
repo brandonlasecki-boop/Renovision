@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listViewerSavedProjects } from "@/lib/data/renovision-saved-projects";
 import { buttonVariants } from "@/components/ui/button";
+import { renameSavedProjectAction } from "@/lib/actions/renovision-saved-projects";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
@@ -46,7 +47,7 @@ export default async function MyProjectsPage() {
                       <div className="h-16 w-16 rounded-lg bg-muted" />
                     )}
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold">{p.selectedStyle || "Saved remodel"}</p>
+                      <p className="text-sm font-semibold">{p.projectName || p.selectedStyle || "Saved remodel"}</p>
                       <p className="text-xs text-muted-foreground">
                         {p.estimateMin != null && p.estimateMax != null
                           ? `${usd.format(p.estimateMin)}–${usd.format(p.estimateMax)}`
@@ -55,6 +56,22 @@ export default async function MyProjectsPage() {
                       <p className="text-xs text-muted-foreground">
                         Saved {new Date(p.createdAt).toLocaleDateString()}
                       </p>
+                      <form action={renameSavedProjectAction} className="pt-1">
+                        <input type="hidden" name="saved_project_id" value={p.id} />
+                        <input
+                          name="project_name"
+                          defaultValue={p.projectName ?? ""}
+                          maxLength={80}
+                          placeholder="Rename project"
+                          className="h-8 w-44 rounded-md border border-input bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground/80"
+                        />
+                        <button
+                          type="submit"
+                          className="ml-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                        >
+                          Save
+                        </button>
+                      </form>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">

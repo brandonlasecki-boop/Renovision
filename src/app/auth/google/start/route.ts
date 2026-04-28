@@ -18,8 +18,8 @@ function normalizeProdOrigin(origin: string): string {
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const safeOrigin = normalizeProdOrigin(origin);
-  const next = searchParams.get("next") ?? "/dashboard";
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const next = searchParams.get("next") ?? "/projects";
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/projects";
 
   const cookieStore = await cookies();
   const supabase = createServerClient(

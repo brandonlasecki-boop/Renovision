@@ -6,6 +6,7 @@ export type SavedProjectCard = {
   id: string;
   projectId: string;
   generationId: string | null;
+  projectName: string | null;
   selectedStyle: string | null;
   estimateMin: number | null;
   estimateMax: number | null;
@@ -24,7 +25,7 @@ export async function listViewerSavedProjects(): Promise<SavedProjectCard[]> {
   const { data } = await svc
     .from("renovision_saved_projects")
     .select(
-      "id, project_id, generation_id, selected_style, estimate_min, estimate_max, created_at, generated_storage_path",
+      "id, project_id, generation_id, project_name, selected_style, estimate_min, estimate_max, created_at, generated_storage_path",
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -40,6 +41,7 @@ export async function listViewerSavedProjects(): Promise<SavedProjectCard[]> {
       id: String(row.id),
       projectId: String(row.project_id),
       generationId: row.generation_id ? String(row.generation_id) : null,
+      projectName: row.project_name ? String(row.project_name) : null,
       selectedStyle: row.selected_style ? String(row.selected_style) : null,
       estimateMin: row.estimate_min == null ? null : Number(row.estimate_min),
       estimateMax: row.estimate_max == null ? null : Number(row.estimate_max),
@@ -54,6 +56,7 @@ export type SavedProjectDetail = {
   id: string;
   projectId: string;
   generationId: string | null;
+  projectName: string | null;
   selectedStyle: string | null;
   estimateMin: number | null;
   estimateMax: number | null;
@@ -73,7 +76,7 @@ export async function loadViewerSavedProject(savedProjectId: string): Promise<Sa
   const { data } = await svc
     .from("renovision_saved_projects")
     .select(
-      "id, user_id, project_id, generation_id, selected_style, estimate_min, estimate_max, created_at, before_storage_path, generated_storage_path",
+      "id, user_id, project_id, generation_id, project_name, selected_style, estimate_min, estimate_max, created_at, before_storage_path, generated_storage_path",
     )
     .eq("id", savedProjectId)
     .eq("user_id", user.id)
@@ -91,6 +94,7 @@ export async function loadViewerSavedProject(savedProjectId: string): Promise<Sa
     id: String(data.id),
     projectId: String(data.project_id),
     generationId: data.generation_id ? String(data.generation_id) : null,
+    projectName: data.project_name ? String(data.project_name) : null,
     selectedStyle: data.selected_style ? String(data.selected_style) : null,
     estimateMin: data.estimate_min == null ? null : Number(data.estimate_min),
     estimateMax: data.estimate_max == null ? null : Number(data.estimate_max),

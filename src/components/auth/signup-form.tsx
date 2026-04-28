@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export function SignupForm({ nextPath = "/dashboard" }: { nextPath?: string }) {
+export function SignupForm({ nextPath = "/projects" }: { nextPath?: string }) {
   const [state, formAction, pending] = useActionState(signUp, undefined);
   const [resendState, resendAction, resendPending] = useActionState(resendConfirmationEmail, undefined);
 

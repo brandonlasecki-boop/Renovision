@@ -11,9 +11,9 @@ export async function signIn(
 ): Promise<{ error: string } | undefined> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const nextRaw = String(formData.get("next") ?? "/dashboard");
+  const nextRaw = String(formData.get("next") ?? "/projects");
   const next =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/projects";
 
   if (!email || !password) {
     return { error: "Email and password are required." };
@@ -43,9 +43,9 @@ export async function signUp(
     return { error: "Password must be at least 8 characters." };
   }
 
-  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const nextRaw = String(formData.get("next") ?? "/projects").trim();
   const nextPath =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/projects";
   const base = await resolveAppOrigin();
 
   const supabase = await createClient();
@@ -89,9 +89,9 @@ export async function sendMagicLink(
   formData: FormData,
 ): Promise<{ error: string } | { success: true }> {
   const email = String(formData.get("email") ?? "").trim();
-  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const nextRaw = String(formData.get("next") ?? "/projects").trim();
   const nextPath =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/projects";
   if (!email) return { error: "Email is required." };
 
   const base = await resolveAppOrigin();
@@ -111,9 +111,9 @@ export async function resendConfirmationEmail(
   formData: FormData,
 ): Promise<{ error: string } | { success: true }> {
   const email = String(formData.get("email") ?? "").trim();
-  const nextRaw = String(formData.get("next") ?? "/dashboard").trim();
+  const nextRaw = String(formData.get("next") ?? "/projects").trim();
   const nextPath =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/projects";
   if (!email) return { error: "Email is required." };
 
   const base = await resolveAppOrigin();

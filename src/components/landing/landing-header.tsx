@@ -3,6 +3,7 @@ import Link from "next/link";
 import { RenovisionLogo } from "@/components/landing/renovision-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
+import { signOut } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -57,15 +58,29 @@ export async function LandingHeader() {
                 Admin Dashboard
               </Link>
             ) : null}
-            <Link
-              href="/login"
-              className={cn(
-                buttonVariants({ variant: "ghost", size: "sm" }),
-                "inline-flex",
-              )}
-            >
-              Log In
-            </Link>
+            {user ? (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className={cn(
+                    buttonVariants({ variant: "ghost", size: "sm" }),
+                    "inline-flex",
+                  )}
+                >
+                  Log Out
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/login"
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "inline-flex",
+                )}
+              >
+                Log In
+              </Link>
+            )}
             <Link href="/try" className={cn(buttonVariants({ size: "sm" }))}>
               Start Free
             </Link>
