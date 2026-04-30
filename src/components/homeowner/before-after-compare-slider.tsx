@@ -50,7 +50,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     <div className="space-y-3">
       <div
         ref={trackRef}
-        className="relative aspect-[4/3] min-h-[19rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:min-h-0"
+        className="relative aspect-[3/4] min-h-[30rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-0"
       >
         <Image
           src={afterUrl}
@@ -115,7 +115,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         <span className="text-xs text-muted-foreground">After</span>
       </div>
       {/* Keep previews visible on phones so users always see full before/after below the slider. */}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
           className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
