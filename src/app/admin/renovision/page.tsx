@@ -315,9 +315,12 @@ export default async function RenovisionAdminPage({
               hint="First previews + refinements"
             />
             <MetricCard
-              title="Signed-in generations"
-              value={overview.totalSignedInMockups}
-              hint="All mockups on saved-to-account projects"
+              title="All mockups on save"
+              value={overview.totalGenerations}
+              hint={`${overview.totalSignedInMockups} signed-in / ${Math.max(
+                0,
+                overview.totalGenerations - overview.totalSignedInMockups,
+              )} guest`}
             />
             <MetricCard title="Connect Me leads" value={overview.totalRemodelerRequests} />
             <MetricCard

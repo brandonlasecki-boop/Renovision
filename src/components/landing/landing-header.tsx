@@ -38,11 +38,14 @@ export async function LandingHeader() {
             </a>
           </nav>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-3">
             {user ? (
               <Link
                 href="/projects"
-                className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "inline-flex")}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "relative z-10 inline-flex touch-manipulation",
+                )}
               >
                 My Projects
               </Link>

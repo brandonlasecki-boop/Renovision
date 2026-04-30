@@ -50,14 +50,14 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     <div className="space-y-3">
       <div
         ref={trackRef}
-        className="relative aspect-[4/3] min-h-[20rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm"
+        className="relative aspect-video min-h-[15rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
         onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
       >
         <Image
           src={afterUrl}
           alt="After remodel"
           fill
-          className="pointer-events-none object-contain"
+          className="pointer-events-none object-cover"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
           quality={75}
           priority={false}
@@ -72,7 +72,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={beforeUrl}
             alt="Before remodel"
             fill
-            className="object-contain"
+            className="object-cover"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
             quality={75}
             priority={false}
@@ -118,6 +118,48 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         />
         <span className="text-xs text-muted-foreground">After</span>
       </div>
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <button
+          type="button"
+          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          onClick={() => setFullscreenImage({ src: beforeUrl, label: "Before" })}
+          aria-label="Open before image fullscreen"
+        >
+          <Image
+            src={beforeUrl}
+            alt="Before full preview"
+            fill
+            className="object-contain"
+            sizes="(max-width: 640px) 48vw, 360px"
+            quality={70}
+            loading="lazy"
+            draggable={false}
+          />
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            Before
+          </span>
+        </button>
+        <button
+          type="button"
+          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          onClick={() => setFullscreenImage({ src: afterUrl, label: "After" })}
+          aria-label="Open after image fullscreen"
+        >
+          <Image
+            src={afterUrl}
+            alt="After full preview"
+            fill
+            className="object-contain"
+            sizes="(max-width: 640px) 48vw, 360px"
+            quality={70}
+            loading="lazy"
+            draggable={false}
+          />
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            After
+          </span>
+        </button>
+      </div>
       {fullscreenImage ? (
         <div
           className="fixed inset-0 z-[130] flex items-center justify-center bg-black/90 p-3 sm:p-6"
@@ -128,11 +170,11 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         >
           <button
             type="button"
-            className="absolute right-3 top-3 rounded-md bg-black/60 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-black/75"
+            className="absolute right-3 top-3 z-20 rounded-md bg-white/90 px-3 py-2 text-sm font-semibold text-black shadow hover:bg-white"
             onClick={() => setFullscreenImage(null)}
             aria-label="Close fullscreen image"
           >
-            Close
+            X Close
           </button>
           <div
             className="relative h-full max-h-[95vh] w-full max-w-6xl overflow-hidden rounded-lg"

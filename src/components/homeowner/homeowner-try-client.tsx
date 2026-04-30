@@ -44,6 +44,7 @@ const usd = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 const MAX_SAFE_PREVIEW_BYTES = 8 * 1024 * 1024;
+const MAX_SAFE_MOBILE_UPLOAD_BYTES = 12 * 1024 * 1024;
 
 /** Approximate shift to total job midpoint vs current estimate; from estimator JSON. */
 function formatTweakImpactBand(s: TryTweakSuggestion): string {
@@ -86,6 +87,18 @@ function assignImageToFileInput(target: HTMLInputElement, file: File | undefined
 /** Very large phone photos can crash mobile Chrome when decoded for client-side preview. */
 function previewAllowed(file: File | undefined | null): file is File {
   return Boolean(file && file.size <= MAX_SAFE_PREVIEW_BYTES);
+}
+
+function isLikelyMobileBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+}
+
+function isLikelyHeic(file: File): boolean {
+  const mime = (file.type || "").toLowerCase();
+  const name = (file.name || "").toLowerCase();
+  return mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
 }
 
 /** Left side of compare — display only; does not change which mockup edits/regen use. */
@@ -307,6 +320,16 @@ export function HomeownerTryClient({
       setFirstUploadPreviewUrl(null);
     }
   }, [generateState]);
+
+  useEffect(() => {
+    if (!generatePending) return;
+    const timeoutId = window.setTimeout(() => {
+      toast.message("Still generating...", {
+        description: "This is taking longer than usual. If it does not finish soon, retry with a smaller JPG/PNG photo.",
+      });
+    }, 90000);
+    return () => window.clearTimeout(timeoutId);
+  }, [generatePending]);
 
   useEffect(() => {
     if (!firstUploadPreviewUrl) return;
@@ -724,6 +747,29 @@ export function HomeownerTryClient({
                   const file = e.target.files?.[0];
                   if (!file) {
                     setFirstUploadPreviewUrl(null);
+                    return;
+                  }
+                  if (isLikelyMobileBrowser() && isLikelyHeic(file)) {
+                    setFirstUploadPreviewUrl(null);
+                    toast.error("This photo format is not supported on mobile upload.", {
+                      description: "Please use a JPG or PNG photo (iPhone: Camera > Formats > Most Compatible).",
+                    });
+                    e.currentTarget.value = "";
+                    return;
+                  }
+                  if (isLikelyMobileBrowser() && file.size > MAX_SAFE_MOBILE_UPLOAD_BYTES) {
+                    setFirstUploadPreviewUrl(null);
+                    toast.error("Photo is too large for reliable mobile generation.", {
+                      description: "Please choose a smaller image (under 12 MB) or retake at a lower resolution.",
+                    });
+                    e.currentTarget.value = "";
+                    return;
+                  }
+                  if (isLikelyMobileBrowser()) {
+                    setFirstUploadPreviewUrl(null);
+                    toast.message("Photo selected", {
+                      description: "Preview is skipped on mobile to prevent browser crashes from large images.",
+                    });
                     return;
                   }
                   if (!previewAllowed(file)) {
