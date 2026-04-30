@@ -32,7 +32,7 @@ import {
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
 import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
-import { trackGoogleAdsEvent, trackGoogleAdsLeadConversion } from "@/lib/analytics/google-ads";
+import { trackEvent, trackGoogleAdsLeadConversion } from "@/lib/analytics/google-ads";
 import afterBoldImage from "../../../Images/after_bold.png";
 import afterCleanImage from "../../../Images/after_clean.png";
 import afterLuxuryImage from "../../../Images/after_luxury.png";
@@ -319,7 +319,7 @@ export function HomeownerTryClient({
       setCompareBeforeSelection("original");
       setStep("result");
       setFirstUploadPreviewUrl(null);
-      trackGoogleAdsEvent("renovision_remodel_generation_completed");
+      trackEvent("remodel_generated");
     }
   }, [generateState]);
 
@@ -409,11 +409,12 @@ export function HomeownerTryClient({
 
   useEffect(() => {
     if (leadState && "success" in leadState && leadState.success) {
+      if (leadSubmitted) return;
       setLeadSubmitted(true);
-      trackGoogleAdsEvent("renovision_connect_form_submitted");
+      trackEvent("connect_me_submitted");
       trackGoogleAdsLeadConversion();
     }
-  }, [leadState]);
+  }, [leadState, leadSubmitted]);
 
   const selectedStyleConfig = useMemo(
     () => bathroomStylesForTry.find((s) => s.id === selectedStyle) ?? null,
@@ -769,7 +770,7 @@ export function HomeownerTryClient({
                     e.currentTarget.value = "";
                     return;
                   }
-                  trackGoogleAdsEvent("renovision_bathroom_photo_uploaded", {
+                  trackEvent("photo_upload_success", {
                     file_type: file.type || "unknown",
                     source: isLikelyMobileBrowser() ? "mobile" : "desktop",
                   });
@@ -1162,7 +1163,7 @@ export function HomeownerTryClient({
                   <Button
                     type="submit"
                     className="h-11 w-full rounded-xl text-sm font-semibold"
-                    onClick={() => trackGoogleAdsEvent("renovision_connect_me_button_clicked")}
+                    onClick={() => trackEvent("connect_me_clicked")}
                   >
                     Connect Me With a Remodeler
                   </Button>
