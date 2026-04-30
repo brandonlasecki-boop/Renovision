@@ -18,7 +18,9 @@
     "retail:smoke:loop": "node scripts/retail-journey-smoke-loop.mjs",
     "retail:smoke:loop:local": "node --env-file=.env.local scripts/retail-journey-smoke-loop.mjs",
     "vertex:smoke": "node scripts/vertex-mockup-smoke.mjs",
-    "try:reencode-loop-video": "powershell -ExecutionPolicy Bypass -File scripts/reencode-looping-video.ps1"
+    "try:reencode-loop-video": "powershell -ExecutionPolicy Bypass -File scripts/reencode-looping-video.ps1",
+    "storage:empty-project-photos": "node --env-file=.env.local scripts/empty-project-photos-bucket.mjs",
+    "clear:app-data": "node --env-file=.env.local scripts/clear-all-app-data.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

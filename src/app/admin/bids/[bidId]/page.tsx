@@ -81,8 +81,8 @@ export default async function AdminBidPage({
   return (
     <div className="space-y-10">
       <div>
-        <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Admin overview
+        <Link href="/admin/renovision" className="text-sm text-muted-foreground hover:text-foreground">
+          ← Renovision admin
         </Link>
         <h1 className="mt-3 text-balance text-2xl font-semibold tracking-tight">{bid.title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">

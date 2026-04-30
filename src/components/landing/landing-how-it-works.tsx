@@ -1,25 +1,27 @@
 import { Camera, LayoutTemplate, UsersRound } from "lucide-react";
 
+import { LandingTryCta } from "@/components/landing/landing-try-cta";
+
 const steps = [
   {
     step: "1",
     title: "Upload your bathroom photo",
     description:
-      "Start with a clear photo of your space—no perfect angles required.",
+      "Use a clear cellphone photo of your space—no perfect angles or measurements required to start.",
     icon: Camera,
   },
   {
     step: "2",
-    title: "See a redesigned version and estimate",
+    title: "See your remodel instantly",
     description:
-      "Explore a fresh visual direction and a planning range to set expectations early.",
+      "Get a realistic visual direction so you can plan with confidence—not guesswork—before you hire anyone.",
     icon: LayoutTemplate,
   },
   {
     step: "3",
-    title: "Connect with remodelers if you want quotes",
+    title: "Get matched with a contractor when you choose",
     description:
-      "When you’re ready, reach out to pros with context already in hand.",
+      "If you want quotes, connect on your schedule. We won’t share your details or flood you with calls unless you opt in.",
     icon: UsersRound,
   },
 ] as const;
@@ -41,13 +43,14 @@ export function LandingHowItWorks() {
       <div className="relative mx-auto max-w-6xl">
         <div className="mx-auto max-w-2xl text-center sm:mx-0 sm:text-left">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">
-            Simple flow
+            Three steps
           </p>
           <h2 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.5rem] lg:leading-tight">
-            How it works
+            How It Works
           </h2>
           <p className="mt-4 text-pretty text-lg leading-relaxed text-muted-foreground">
-            Three calm steps from inspiration to clarity—without the overwhelm.
+            A simple planning path from your real bathroom to a confident hire. Contractor connection is always optional—you
+            stay in control.
           </p>
         </div>
 
@@ -80,6 +83,8 @@ export function LandingHowItWorks() {
             ))}
           </div>
         </div>
+
+        <LandingTryCta align="left" />
       </div>
     </section>
   );

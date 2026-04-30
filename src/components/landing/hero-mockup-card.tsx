@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -7,14 +8,28 @@ import { cn } from "@/lib/utils";
 const HERO_BEFORE_SRC = "/landing/before_main.jpg";
 const HERO_AFTER_SRC = "/landing/after_luxury.png";
 
-export function HeroMockupCard({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_24px_80px_-12px_rgba(12,39,68,0.12)] ring-1 ring-black/[0.03]",
-        className,
-      )}
-    >
+export function HeroMockupCard({
+  className,
+  linkToTry = false,
+}: {
+  className?: string;
+  /** When true, the whole card links to `/try` with a clearer conversion path. */
+  linkToTry?: boolean;
+}) {
+  const shellClass = cn(
+    "relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_24px_80px_-12px_rgba(12,39,68,0.12)] ring-1 ring-black/[0.03]",
+    linkToTry &&
+      "transition-all duration-300 hover:-translate-y-0.5 hover:border-renovision-orange/25 hover:shadow-[0_28px_90px_-16px_rgba(12,39,68,0.22)]",
+    className,
+  );
+
+  const inner = (
+    <>
+      <div className="border-b border-border/60 bg-gradient-to-r from-renovision-navy/[0.06] to-transparent px-4 py-2.5 sm:px-5">
+        <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-renovision-navy sm:text-left sm:text-xs">
+          Real Example — Same Bathroom, Remodeled
+        </p>
+      </div>
       <div className="relative aspect-[4/3] w-full sm:aspect-[16/11]">
         <div className="absolute inset-0 grid grid-cols-2">
           <div className="relative overflow-hidden bg-muted">
@@ -44,13 +59,17 @@ export function HeroMockupCard({ className }: { className?: string }) {
             </span>
           </div>
         </div>
-        {/* Scan / progress line */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden opacity-90"
           aria-hidden
         >
           <div className="animate-mockup-scan absolute left-0 right-0 h-[42%] bg-gradient-to-b from-transparent via-white/25 to-transparent" />
         </div>
+        {linkToTry ? (
+          <span className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-renovision-navy/95 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg sm:text-xs sm:opacity-0 sm:transition-opacity sm:duration-200 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100">
+            Tap to see your remodel
+          </span>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-3 sm:px-5">
@@ -62,9 +81,7 @@ export function HeroMockupCard({ className }: { className?: string }) {
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Planning estimate
             </p>
-            <p className="text-sm font-semibold tabular-nums text-foreground">
-              Estimated Range: $14k–$22k
-            </p>
+            <p className="text-sm font-semibold tabular-nums text-foreground">Estimated Range: $14k–$22k</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -72,11 +89,26 @@ export function HeroMockupCard({ className }: { className?: string }) {
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-renovision-teal/60 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-renovision-teal" />
           </span>
-          <span className="text-xs font-medium text-muted-foreground">
-            Refining…
-          </span>
+          <span className="text-xs font-medium text-muted-foreground">Refining…</span>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (linkToTry) {
+    return (
+      <Link
+        href="/try"
+        className={cn(
+          shellClass,
+          "group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        )}
+        aria-label="See your bathroom remodeled: upload your photo to start"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className={shellClass}>{inner}</div>;
 }

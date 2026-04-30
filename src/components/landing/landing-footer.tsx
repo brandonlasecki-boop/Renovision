@@ -17,6 +17,12 @@ export function LandingFooter() {
           aria-label="Footer"
         >
           <Link
+            href="/try"
+            className="font-semibold text-renovision-navy transition-colors hover:text-renovision-navy/80 dark:text-renovision-orange dark:hover:text-renovision-orange/90"
+          >
+            See my bathroom remodel
+          </Link>
+          <Link
             href="/privacy"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >

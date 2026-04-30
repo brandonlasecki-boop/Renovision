@@ -2520,7 +2520,9 @@ export async function submitBathroomLeadAction(
   const selectedStyle = str(formData, "selected_style");
   const estimateMin = Number(str(formData, "estimate_min") || "0");
   const estimateMax = Number(str(formData, "estimate_max") || "0");
-  const name = str(formData, "name").slice(0, 120);
+  const firstName = str(formData, "first_name").slice(0, 80);
+  const lastName = str(formData, "last_name").slice(0, 80);
+  const name = [firstName, lastName].filter(Boolean).join(" ").slice(0, 120);
   const email = str(formData, "email").slice(0, 180);
   const phone = str(formData, "phone").slice(0, 40);
   const zipCode = str(formData, "zip_code").slice(0, 20);
@@ -2529,9 +2531,24 @@ export async function submitBathroomLeadAction(
   const preferredContactMethod = str(formData, "preferred_contact_method").slice(0, 40);
   const bestContactTime = str(formData, "best_contact_time").slice(0, 40);
   const notes = str(formData, "project_notes").slice(0, 2000);
+  const estimateConfidence = str(formData, "estimate_confidence").slice(0, 20);
+
+  const safeJson = (key: string): unknown => {
+    const raw = str(formData, key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+  const estimateBreakdown = safeJson("estimate_breakdown_json");
+  const estimateDetailedBreakdown = safeJson("estimate_detailed_breakdown_json");
+  const estimateReasoning = safeJson("estimate_reasoning_json");
+  const estimateAssumptions = safeJson("estimate_assumptions_json");
 
   if (!generationId || !selectedStyle) return { error: "Missing generation details." };
-  if (!name || !email || !phone || !zipCode || !timeline || !budgetRange || !preferredContactMethod) {
+  if (!firstName || !email || !phone || !zipCode || !timeline || !budgetRange || !preferredContactMethod) {
     return { error: "Please complete all required fields." };
   }
 
@@ -2541,6 +2558,8 @@ export async function submitBathroomLeadAction(
   const svc = createServiceClient();
   await svc.from("leads").insert({
     generation_id: generationId,
+    first_name: firstName,
+    last_name: lastName || null,
     name,
     email,
     phone,
@@ -2553,6 +2572,11 @@ export async function submitBathroomLeadAction(
     selected_style: selectedStyle,
     estimate_min: estimateMin,
     estimate_max: estimateMax,
+    estimate_breakdown: estimateBreakdown,
+    estimate_detailed_breakdown: estimateDetailedBreakdown,
+    estimate_reasoning: estimateReasoning,
+    estimate_assumptions: estimateAssumptions,
+    estimate_confidence: estimateConfidence || null,
     attribution: incomingAttribution,
   });
   if (process.env.NODE_ENV !== "production" && incomingAttribution) {

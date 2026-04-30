@@ -1225,10 +1225,23 @@ export function HomeownerTryClient({
                 <input type="hidden" name="selected_style" value={generation.styleName} />
                 <input type="hidden" name="estimate_min" value={String(generation.estimateRange.min)} />
                 <input type="hidden" name="estimate_max" value={String(generation.estimateRange.max)} />
+                <input type="hidden" name="estimate_breakdown_json" value={JSON.stringify(generation.breakdown)} />
+                <input
+                  type="hidden"
+                  name="estimate_detailed_breakdown_json"
+                  value={JSON.stringify(generation.detailedBreakdown)}
+                />
+                <input type="hidden" name="estimate_reasoning_json" value={JSON.stringify(generation.reasoning)} />
+                <input type="hidden" name="estimate_assumptions_json" value={JSON.stringify(generation.assumptions)} />
+                <input type="hidden" name="estimate_confidence" value={generation.confidence} />
                 <input type="hidden" name="attribution_json" value={attributionJson} />
                 <div className="space-y-1">
-                  <Label htmlFor="lead_name">Name</Label>
-                  <Input id="lead_name" name="name" required />
+                  <Label htmlFor="lead_first_name">First name</Label>
+                  <Input id="lead_first_name" name="first_name" required />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="lead_last_name">Last name (optional)</Label>
+                  <Input id="lead_last_name" name="last_name" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="lead_email">Email</Label>

@@ -1,5 +1,7 @@
 import { Quote } from "lucide-react";
 
+import { LandingTryCta } from "@/components/landing/landing-try-cta";
+
 const quotes = [
   {
     quote: "This made it so much easier to picture the remodel.",
@@ -61,6 +63,8 @@ export function LandingTestimonials() {
             </figure>
           ))}
         </div>
+
+        <LandingTryCta />
       </div>
     </section>
   );

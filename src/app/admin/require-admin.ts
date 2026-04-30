@@ -10,7 +10,7 @@ export async function requireAdminUser() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user?.email) {
-    redirect("/login?next=/admin");
+    redirect("/login?next=/admin/renovision");
   }
 
   if (isAdminEmail(user.email)) {

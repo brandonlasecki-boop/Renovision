@@ -52,7 +52,7 @@ export async function LandingHeader() {
             ) : null}
             {showAdminNav ? (
               <Link
-                href="/admin"
+                href="/admin/renovision"
                 className={cn(
                   buttonVariants({ variant: "outline", size: "sm" }),
                   "inline-flex border-renovision-orange/40 text-renovision-navy",
@@ -84,8 +84,14 @@ export async function LandingHeader() {
                 Log In
               </Link>
             )}
-            <Link href="/try" className={cn(buttonVariants({ size: "sm" }))}>
-              Try My Bathroom
+            <Link
+              href="/try"
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "max-w-[10.5rem] whitespace-normal px-2.5 text-center text-[11px] font-semibold leading-tight sm:max-w-none sm:px-4 sm:text-sm sm:leading-none",
+              )}
+            >
+              See My Bathroom Remodel
             </Link>
           </div>
         </div>

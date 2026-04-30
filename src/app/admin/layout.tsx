@@ -22,7 +22,7 @@ export default async function AdminLayout({
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6">
           <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
             <Link
-              href="/admin"
+              href="/admin/renovision"
               className="flex shrink-0 items-center gap-2.5 text-foreground transition-opacity hover:opacity-90"
             >
               <span

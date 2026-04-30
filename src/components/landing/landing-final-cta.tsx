@@ -25,13 +25,14 @@ export function LandingFinalCta() {
         <div className="rounded-[2rem] border border-border/50 bg-gradient-to-br from-card via-card to-muted/40 p-10 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)] ring-1 ring-black/[0.05] sm:p-12 md:p-14">
           <div className="text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">
-              Next step
+              Plan before you hire
             </p>
             <h2 className="mt-3 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-              Ready to see your bathroom redesign?
+              See your bathroom remodeled—then decide with confidence
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-              Get a visual and budget range in minutes, then decide next steps with confidence.
+              Upload a photo for a realistic preview and planning context. Connect with a contractor only if and when you
+              choose—no spam, no pressure.
             </p>
             <div className="mt-10">
               <Link
@@ -41,11 +42,11 @@ export function LandingFinalCta() {
                   "h-12 bg-renovision-navy px-10 text-base font-semibold text-white shadow-lg shadow-renovision-navy/25 transition hover:bg-renovision-navy/90",
                 )}
               >
-                Try My Bathroom Free
+                See My Bathroom Remodel
               </Link>
             </div>
-            <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-              Free to try — no contractor calls unless you request them.
+            <p className="mt-5 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+              No cost to try. No contractor outreach unless you opt in.
             </p>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { ChevronDown } from "lucide-react";
 
+import { LandingTryCta } from "@/components/landing/landing-try-cta";
+
 const faqs = [
   {
     q: "Is the estimate exact?",
@@ -63,6 +65,8 @@ export function LandingFaq() {
             </details>
           ))}
         </div>
+
+        <LandingTryCta />
       </div>
     </section>
   );

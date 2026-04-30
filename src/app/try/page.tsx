@@ -89,7 +89,7 @@ export default async function RenovisionTryPage({
             </Link>
             <div className="flex items-center gap-3 text-sm">
               {showAdminNav ? (
-                <Link href="/admin" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                <Link href="/admin/renovision" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
                   Admin Dashboard
                 </Link>
               ) : null}
@@ -116,7 +116,7 @@ export default async function RenovisionTryPage({
           </Link>
           <div className="flex items-center gap-3 text-sm">
             {showAdminNav ? (
-              <Link href="/admin" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+              <Link href="/admin/renovision" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
                 Admin Dashboard
               </Link>
             ) : null}

@@ -43,7 +43,7 @@ export function DashboardShell({
               </Link>
               {showAdminNav ? (
                 <Link
-                  href="/admin"
+                  href="/admin/renovision"
                   className={cn(
                     buttonVariants({ variant: "ghost", size: "sm" }),
                     "shrink-0 text-renovision-navy",

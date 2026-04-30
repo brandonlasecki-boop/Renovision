@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "/admin", label: "Estimates", match: (p: string) => p.startsWith("/admin") && !p.startsWith("/admin/renovision") },
   { href: "/admin/renovision", label: "Renovision", match: (p: string) => p.startsWith("/admin/renovision") },
+  { href: "/admin/contractors", label: "Contractors", match: (p: string) => p.startsWith("/admin/contractors") },
   { href: "/dashboard", label: "App dashboard", match: (p: string) => p.startsWith("/dashboard") },
 ] as const;
 

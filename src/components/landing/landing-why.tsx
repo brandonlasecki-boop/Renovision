@@ -1,5 +1,7 @@
 import { Eye, PiggyBank, MessageCircle } from "lucide-react";
 
+import { LandingTryCta } from "@/components/landing/landing-try-cta";
+
 const benefits = [
   {
     title: "Visualize before you commit",
@@ -62,6 +64,8 @@ export function LandingWhy() {
             </li>
           ))}
         </ul>
+
+        <LandingTryCta />
       </div>
     </section>
   );
