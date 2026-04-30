@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type BeforeAfterCompareSliderProps = {
   beforeUrl: string;
@@ -18,7 +18,29 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: "Before" | "After" } | null>(
     null,
   );
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileAspectRatio, setMobileAspectRatio] = useState<number>(4 / 3);
   const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsMobileViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.onload = () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      // Keep slider reasonably wide on phones while respecting portrait photos.
+      const ratio = img.naturalWidth / img.naturalHeight;
+      const clamped = Math.max(0.55, Math.min(1.6, ratio));
+      setMobileAspectRatio(clamped);
+    };
+    img.src = afterUrl;
+  }, [afterUrl]);
 
   const updateFromClientX = useCallback((clientX: number) => {
     const el = trackRef.current;
@@ -50,7 +72,8 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     <div className="space-y-3">
       <div
         ref={trackRef}
-        className="relative aspect-video min-h-[15rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
+        className="relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
+        style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
         onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
       >
         <Image
@@ -121,7 +144,8 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
-          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          className="relative m-0 w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm sm:aspect-[4/3]"
+          style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
           onClick={() => setFullscreenImage({ src: beforeUrl, label: "Before" })}
           aria-label="Open before image fullscreen"
         >
@@ -141,7 +165,8 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         </button>
         <button
           type="button"
-          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          className="relative m-0 w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm sm:aspect-[4/3]"
+          style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
           onClick={() => setFullscreenImage({ src: afterUrl, label: "After" })}
           aria-label="Open after image fullscreen"
         >
