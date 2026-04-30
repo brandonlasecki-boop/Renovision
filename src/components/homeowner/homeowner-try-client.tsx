@@ -341,15 +341,18 @@ export function HomeownerTryClient({
     }
   }, [generateState, setLoaderBeforeBlob]);
 
+  const slowGenerationToastMs = 120_000;
+
   useEffect(() => {
-    if (!generatePending) return;
+    if (!generatePending && !regenPending) return;
     const timeoutId = window.setTimeout(() => {
       toast.message("Still generating...", {
-        description: "This is taking longer than usual. If it does not finish soon, retry with a smaller JPG/PNG photo.",
+        description:
+          "Complex renders can take a few minutes. You can keep this tab open. If it fails, try a smaller JPG/PNG photo.",
       });
-    }, 90000);
+    }, slowGenerationToastMs);
     return () => window.clearTimeout(timeoutId);
-  }, [generatePending]);
+  }, [generatePending, regenPending]);
 
   useEffect(() => {
     if (regenState && "success" in regenState && regenState.success) {
@@ -475,13 +478,13 @@ export function HomeownerTryClient({
     if (generatePending) {
       return {
         title: "Designing your bathroom...",
-        hint: "This takes about 60–90 seconds",
+        hint: "Usually about 1–2 minutes (AI image + budget estimate)",
       };
     }
     if (regenPending) {
       return {
         title: "Applying your tweak…",
-        hint: "Often about a minute or two.",
+        hint: "Usually about 1–2 minutes",
       };
     }
     if (versionPending) {
@@ -792,25 +795,18 @@ export function HomeownerTryClient({
                     file_type: file.type || "unknown",
                     source: isLikelyMobileBrowser() ? "mobile" : "desktop",
                   });
-                  if (isLikelyMobileBrowser()) {
-                    setFirstUploadPreviewUrl(null);
-                    setLoaderBeforeBlob(URL.createObjectURL(file));
-                    toast.message("Photo selected", {
-                      description: "Preview is skipped on mobile to prevent browser crashes from large images.",
-                    });
+                  const objectUrl = URL.createObjectURL(file);
+                  setLoaderBeforeBlob(objectUrl);
+                  if (previewAllowed(file)) {
+                    setFirstUploadPreviewUrl(objectUrl);
+                    toast.message("Photo selected");
                     return;
                   }
-                  if (!previewAllowed(file)) {
-                    setFirstUploadPreviewUrl(null);
-                    setLoaderBeforeBlob(URL.createObjectURL(file));
-                    toast.message("Photo selected", {
-                      description: "Preview skipped for very large image to keep mobile stable.",
-                    });
-                    return;
-                  }
-                  const u = URL.createObjectURL(file);
-                  setLoaderBeforeBlob(u);
-                  setFirstUploadPreviewUrl(u);
+                  setFirstUploadPreviewUrl(null);
+                  toast.message("Photo selected", {
+                    description:
+                      "This photo is large — we’ll show it while your mockup generates (thumbnail hidden to avoid slowdowns).",
+                  });
                 }}
               />
               <input

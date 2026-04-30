@@ -7,6 +7,7 @@ import {
   bufferToArrayBuffer,
   bufferToDataUrl,
   normalizeImageBufferForDisplay,
+  resizeBufferForOpenAiVisionIfLarge,
 } from "@/lib/images/normalize-image-exif";
 import type { BidMaterialLine } from "@/types/bid";
 import {
@@ -280,7 +281,8 @@ export async function runHomeownerTryMockupGeneration(params: {
     }
     const beforeRaw = Buffer.from(await beforeDl.data.arrayBuffer());
     const beforeNorm = await normalizeImageBufferForDisplay(beforeRaw, "image/jpeg");
-    const beforeDataUrl = bufferToDataUrl(beforeNorm);
+    const beforeForVision = await resizeBufferForOpenAiVisionIfLarge(beforeNorm.buffer, beforeNorm.contentType);
+    const beforeDataUrl = bufferToDataUrl(beforeForVision);
 
     let latestMockupStoragePath: string | null = null;
     if (mockupRows.length > 0) {

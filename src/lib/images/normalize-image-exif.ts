@@ -17,6 +17,43 @@ function fallbackContentType(mime: string): NormalizedImageBytes["contentType"] 
  * Applies EXIF Orientation (and similar) so pixel data matches how viewers show the image.
  * Output is re-encoded without orientation metadata so downstream models are not confused.
  */
+/**
+ * Longest edge cap for OpenAI **vision** (layout/materials) — large phone photos are downscaled so
+ * analysis returns faster. Mockup **image generation** should keep full-res input (separate path).
+ */
+const OPENAI_VISION_MAX_EDGE_PX = 1536;
+
+/**
+ * If the image is larger than `maxEdgePx` on the longest side, resize (fit inside) and re-encode as
+ * JPEG. Used for `fetchMaterialsAndSummaryFromOpenAI` on `/try` so multi‑MP uploads do not slow the
+ * first vision call. No-op when already small enough.
+ */
+export async function resizeBufferForOpenAiVisionIfLarge(
+  input: Buffer,
+  fallbackMime = "image/jpeg",
+  maxEdgePx = OPENAI_VISION_MAX_EDGE_PX,
+): Promise<NormalizedImageBytes> {
+  const norm = await normalizeImageBufferForDisplay(input, fallbackMime);
+  try {
+    const meta = await sharp(norm.buffer, { failOn: "none" }).metadata();
+    const w = meta.width ?? 0;
+    const h = meta.height ?? 0;
+    const longEdge = Math.max(w, h);
+    if (longEdge <= maxEdgePx || longEdge === 0) {
+      return norm;
+    }
+    const jpegBuf = await sharp(norm.buffer, { failOn: "none" })
+      .rotate()
+      .resize(maxEdgePx, maxEdgePx, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85, mozjpeg: true })
+      .toBuffer();
+    return { buffer: jpegBuf, contentType: "image/jpeg" };
+  } catch (err) {
+    console.warn("[resize-for-openai-vision] sharp failed; using full normalized image:", err);
+    return norm;
+  }
+}
+
 export async function normalizeImageBufferForDisplay(
   input: Buffer,
   fallbackMime = "image/jpeg",

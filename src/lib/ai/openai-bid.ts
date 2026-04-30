@@ -724,7 +724,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
   const visionMaxTokens = homeownerTryFastVision
     ? hasAfterMockup
       ? 6000
-      : 2800
+      : 2200
     : hasAfterMockup
       ? 8192
       : 4096;
