@@ -15,6 +15,9 @@ type BeforeAfterCompareSliderProps = {
  */
 export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCompareSliderProps) {
   const [pct, setPct] = useState(50);
+  const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: "Before" | "After" } | null>(
+    null,
+  );
   const trackRef = useRef<HTMLDivElement>(null);
 
   const updateFromClientX = useCallback((clientX: number) => {
@@ -47,7 +50,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     <div className="space-y-3">
       <div
         ref={trackRef}
-        className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm"
+        className="relative aspect-[4/3] min-h-[19rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:min-h-0"
       >
         <Image
           src={afterUrl}
@@ -113,7 +116,12 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
       </div>
       {/* Keep previews visible on phones so users always see full before/after below the slider. */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-        <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
+        <button
+          type="button"
+          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          onClick={() => setFullscreenImage({ src: beforeUrl, label: "Before" })}
+          aria-label="Open before image fullscreen"
+        >
           <Image
             src={beforeUrl}
             alt="Before — full preview"
@@ -124,11 +132,16 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             loading="lazy"
             draggable={false}
           />
-          <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
             Before
-          </figcaption>
-        </figure>
-        <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
+          </span>
+        </button>
+        <button
+          type="button"
+          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
+          onClick={() => setFullscreenImage({ src: afterUrl, label: "After" })}
+          aria-label="Open after image fullscreen"
+        >
           <Image
             src={afterUrl}
             alt="After — full preview"
@@ -139,11 +152,47 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             loading="lazy"
             draggable={false}
           />
-          <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
             After
-          </figcaption>
-        </figure>
+          </span>
+        </button>
       </div>
+      {fullscreenImage ? (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/90 p-3 sm:p-6"
+          onClick={() => setFullscreenImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${fullscreenImage.label} image fullscreen`}
+        >
+          <button
+            type="button"
+            className="absolute right-3 top-3 rounded-md bg-black/60 px-2.5 py-1.5 text-sm font-medium text-white hover:bg-black/75"
+            onClick={() => setFullscreenImage(null)}
+            aria-label="Close fullscreen image"
+          >
+            Close
+          </button>
+          <div
+            className="relative h-full max-h-[95vh] w-full max-w-6xl overflow-hidden rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={fullscreenImage.src}
+              alt={`${fullscreenImage.label} remodel fullscreen`}
+              fill
+              className="object-contain"
+              sizes="100vw"
+              quality={90}
+              priority
+              draggable={false}
+            />
+            <span className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/60 px-2 py-1 text-xs font-medium text-white">
+              {fullscreenImage.label}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
