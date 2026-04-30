@@ -7,7 +7,10 @@ import { cn } from "@/lib/utils";
 
 export function LandingHero() {
   return (
-    <section className="relative overflow-hidden border-b border-border/40 bg-gradient-to-b from-[#fbf8f3] via-[#f8f5ef] to-background px-4 pb-12 pt-8 sm:px-6 sm:pb-20 sm:pt-12 lg:px-8">
+    <section
+      id="preview"
+      className="relative scroll-mt-20 overflow-hidden border-b border-border/40 bg-gradient-to-b from-[#fbf8f3] via-[#f8f5ef] to-background px-4 pb-12 pt-8 sm:px-6 sm:pb-20 sm:pt-12 lg:px-8"
+    >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(232,126,55,0.08),transparent)]"
         aria-hidden

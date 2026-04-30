@@ -1675,16 +1675,16 @@ export async function generateBathroomMockupAction(
 
   const styleDefaults = defaultEstimateFromStyle(style);
 
-  const qualityCheck = await evaluateBathroomResultQuality({
-    beforeImageUrl: beforeForVision,
-    afterImageUrl: generatedSigned.data.signedUrl,
-    selectedStyle: style.id,
-    wetZoneRemodelIntent: initialWetZoneIntent,
-  });
-  if (!qualityCheck.pass) {
-    /** Optional second full render after QA failure. Kept opt-in to avoid doubling latency in normal flow. */
-    const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
-    if (allowRescue) {
+  /** When rescue rerender is disabled, skip QA vision call to reduce latency. */
+  const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
+  if (allowRescue) {
+    const qualityCheck = await evaluateBathroomResultQuality({
+      beforeImageUrl: beforeForVision,
+      afterImageUrl: generatedSigned.data.signedUrl,
+      selectedStyle: style.id,
+      wetZoneRemodelIntent: initialWetZoneIntent,
+    });
+    if (!qualityCheck.pass) {
       await runHomeownerTryMockupGeneration({
         projectId,
         selectedStyle: style.id,
@@ -1700,11 +1700,6 @@ export async function generateBathroomMockupAction(
         generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(rerunLatest.storage_path, 60 * 60);
         latest = rerunLatest;
       }
-    } else {
-      console.warn(
-        "[try] QA gate did not pass on initial render; keeping first render (no automatic rescue). Issues:",
-        qualityCheck.issues,
-      );
     }
   }
   if (!generatedSigned.data?.signedUrl) {
@@ -2003,7 +1998,9 @@ export async function regenerateBathroomMockupAction(
     (await beforeImageUrlForOpenAiVision(svc, project.before_storage_path, beforeSigned.data?.signedUrl)) ||
     generatedSigned.data?.signedUrl ||
     "";
-  if (beforeForVision && generatedSigned.data?.signedUrl) {
+  /** When rescue rerender is disabled, skip QA vision call to reduce latency. */
+  const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
+  if (allowRescue && beforeForVision && generatedSigned.data?.signedUrl) {
     const qa = await evaluateBathroomResultQuality({
       beforeImageUrl: beforeForVision,
       afterImageUrl: generatedSigned.data.signedUrl,
@@ -2011,9 +2008,6 @@ export async function regenerateBathroomMockupAction(
       wetZoneRemodelIntent,
     });
     if (!qa.pass) {
-      /** Second full Vertex run after QA failure can double latency and hit route `maxDuration` — tweaks skip by default. */
-      const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
-      if (allowRescue) {
         const rescuePrompt = `${additionalPromptFinal}\n\n${wetZoneRemodelIntent ? QUALITY_RESCUE_PROMPT_WET_ZONE : QUALITY_RESCUE_PROMPT}`;
         await runHomeownerTryMockupGeneration({
           projectId,
@@ -2031,12 +2025,6 @@ export async function regenerateBathroomMockupAction(
           generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(rerunLatest.storage_path, 60 * 60);
           latest = rerunLatest;
         }
-      } else {
-        console.warn(
-          "[try] QA gate did not pass after tweak; keeping first render (no automatic rescue). Issues:",
-          qa.issues,
-        );
-      }
     }
   }
   if (!generatedSigned.data?.signedUrl) return { error: "Could not prepare regenerated image." };
