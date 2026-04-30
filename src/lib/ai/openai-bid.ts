@@ -1,4 +1,7 @@
-import { truncateMockupTextPromptWithLayoutReinforcement } from "@/lib/ai/mockup-prompt-truncate";
+import {
+  truncateMockupTextPromptWithLayoutReinforcement,
+  type TruncateMockupLayoutOpts,
+} from "@/lib/ai/mockup-prompt-truncate";
 import { normalizeMaterialTrade } from "@/lib/bid-scope";
 import {
   enumerateMockupProductRefSlots,
@@ -947,6 +950,21 @@ function extForMime(mime: string): string {
  * Remodel the same room using the before image as reference (OpenAI image edits).
  * Uses multipart/form-data per https://platform.openai.com/docs/api-reference/images/createEdit
  */
+/**
+ * `1024x1024` on a wide/tall source often looks "zoomed" or re-cropped. GPT Image edit supports
+ * `auto` so output aspect follows the input. DALL·E 2 only supports fixed squares.
+ * Override: `MOCKUP_OPENAI_IMAGE_EDIT_SIZE=1024x1024|1024x1536|1536x1024|auto`
+ */
+export function resolveOpenAiImageEditOutputSize(model: string): string {
+  const raw = process.env.MOCKUP_OPENAI_IMAGE_EDIT_SIZE?.trim();
+  if (raw && /^(1024x1024|1024x1536|1536x1024|auto)$/i.test(raw)) {
+    return raw.toLowerCase();
+  }
+  if (/dall-e-2/i.test(model)) return "1024x1024";
+  if (/gpt-image|chatgpt-image/i.test(model.toLowerCase())) return "auto";
+  return "1024x1024";
+}
+
 function openAiImageEditPromptMaxChars(model: string): number {
   if (/dall-e-2/i.test(model)) return 1000;
   const raw = process.env.MOCKUP_OPENAI_IMAGE_EDIT_PROMPT_MAX_CHARS?.trim();
@@ -964,6 +982,8 @@ export async function fetchRoomRemodelImageEdit(params: {
   contentType: string;
   editPrompt: string;
   model?: string;
+  /** Forwarded to {@link truncateMockupTextPromptWithLayoutReinforcement} (e.g. luxury OpenAI pin). */
+  mockupTruncateOpts?: TruncateMockupLayoutOpts;
 }): Promise<ArrayBuffer> {
   const { apiKey, imageBytes, contentType, editPrompt } = params;
   const model = params.model?.trim() || DEFAULT_IMAGE_EDIT_MODEL;
@@ -977,10 +997,15 @@ export async function fetchRoomRemodelImageEdit(params: {
   form.append("image", blob, filename);
   form.append(
     "prompt",
-    truncateMockupTextPromptWithLayoutReinforcement(editPrompt, openAiImageEditPromptMaxChars(model)),
+    truncateMockupTextPromptWithLayoutReinforcement(
+      editPrompt,
+      openAiImageEditPromptMaxChars(model),
+      undefined,
+      params.mockupTruncateOpts,
+    ),
   );
   form.append("model", model);
-  form.append("size", "1024x1024");
+  form.append("size", resolveOpenAiImageEditOutputSize(model));
   form.append("output_format", "png");
 
   const res = await fetch("https://api.openai.com/v1/images/edits", {
@@ -1446,6 +1471,11 @@ export type BuildImageEditPromptParams = {
   weakRoomGeometryEvidence?: boolean;
   /** Vertex skipped sending catalog/contractor pixels (text summary only). */
   inlineProductPixelsOmitted?: boolean;
+  /**
+   * Luxury + OpenAI strict path: shorten supporting text so {@link truncateMockupTextPromptWithLayoutReinforcement}
+   * does not omit the vision-built geometry section from the middle of the prompt.
+   */
+  compactForLuxuryOpenAiStrict?: boolean;
 };
 
 /**
@@ -1465,6 +1495,7 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
     fullEstimateContext,
     weakRoomGeometryEvidence = false,
     inlineProductPixelsOmitted = false,
+    compactForLuxuryOpenAiStrict = false,
     vertexJobBrief: vertexJobBriefRaw,
     scopeCompositeForRules: scopeCompositeForRulesRaw,
   } = params;
@@ -1517,7 +1548,8 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
     : "";
 
   const fullEst = vertexBrief.length > 0 ? "" : (fullEstimateContext?.trim() ?? "");
-  const fullEstForPrompt = perRunTweakMode ? "" : fullEst;
+  const fullEstForPrompt =
+    compactForLuxuryOpenAiStrict ? "" : perRunTweakMode ? "" : fullEst;
   const fullEstSection =
     fullEstForPrompt.length > 0
       ? [
@@ -1547,6 +1579,11 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
     : "";
 
   const mirrorHeavyBlock = mirrorHeavyScene ? `${MIRROR_HEAVY_SCENE_IMAGE_LOCK}\n` : "";
+
+  const roomNotesForImage =
+    compactForLuxuryOpenAiStrict && roomForImage.trim().length > 2800
+      ? `${roomForImage.trim().slice(0, 2800)}\n\n[Room notes truncated for length — photo wins.]`
+      : roomForImage.trim() || "(see photo)";
 
   const corePrefix = [
     ...(leadIn ? [leadIn] : []),
@@ -1582,18 +1619,25 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
     );
   }
 
+  const scopeForContractorDisplay =
+    compactForLuxuryOpenAiStrict && scopeTrim.length > 4000
+      ? `${scopeTrim.slice(0, 4000)}\n\n[Scope truncated for length — photo wins.]`
+      : scopeTrim || "(none)";
+
   const contractorScopeBlock =
     vertexBrief.length > 0
       ? [
           "IMAGE JOB BRIEF (OpenAI-compressed from full scope, walkthrough, Q&A, measurements, estimate):",
-          vertexBrief,
+          compactForLuxuryOpenAiStrict && vertexBrief.length > 4500
+            ? `${vertexBrief.slice(0, 4500)}\n\n[Job brief truncated — photo wins.]`
+            : vertexBrief,
           "",
         ].join("\n")
       : [
           imageEditSource === "latest_mockup"
             ? "Contractor scope (reference only):"
             : "Contractor scope:",
-          scopeTrim || "(none)",
+          scopeForContractorDisplay,
           "",
         ].join("\n");
 
@@ -1620,7 +1664,7 @@ export function buildImageEditPrompt(params: BuildImageEditPromptParams): string
       quoteRefBlock,
       contractorScopeBlock,
       "Room notes (photo wins if text disagrees):",
-      roomForImage.trim() || "(see photo)",
+      roomNotesForImage,
       "",
       "Remodel instructions:",
       remodelMerged,

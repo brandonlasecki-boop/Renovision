@@ -18,7 +18,6 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   generateBathroomMockupAction,
   regenerateBathroomMockupAction,
-  saveMyProjectAction,
   selectTryMockupVersionAction,
   submitBathroomLeadAction,
   trackConnectClickedAction,
@@ -26,7 +25,10 @@ import {
   type TryGenerationViewState,
   type TryTweakSuggestion,
 } from "@/lib/actions/homeowner-try";
-import { BATHROOM_STYLES } from "@/lib/homeowner-try/bathroom-styles";
+import {
+  getTryPageBathroomStyles,
+  type BathroomStyleId,
+} from "@/lib/homeowner-try/bathroom-styles";
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
 import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
@@ -59,7 +61,13 @@ function formatTweakImpactBand(s: TryTweakSuggestion): string {
   return `${usd.format(lo)}–${usd.format(hi)}`;
 }
 
-type TryMockupVersionRow = { id: string; label: string; imageUrl: string; storagePath: string };
+type TryMockupVersionRow = {
+  id: string;
+  label: string;
+  imageUrl: string;
+  storagePath: string;
+  caption?: string | null;
+};
 
 /** Copy a picked `File` onto the real form `<input name="bathroom_photo">` (camera vs library use separate pickers). */
 function assignImageToFileInput(target: HTMLInputElement, file: File | undefined | null) {
@@ -178,6 +186,7 @@ function styleTokenForVersionLabel(styleId: string, styleName: string): string {
   if (styleId === "warm_minimalist") return "Warm";
   if (styleId === "bold_modern") return "Bold";
   if (styleId === "clean_refresh") return "Clean";
+  if (styleId === "coastal_beach_house") return "Coastal";
   const first = styleName.trim().split(/\s+/)[0] ?? "";
   return first || "Style";
 }
@@ -196,13 +205,22 @@ export function HomeownerTryClient({
   restoredGeneration = null,
   autoSavedProject = false,
   startNewProject = false,
+  startNewToken = "",
+  viewerIsAdmin = false,
 }: {
   initial: Exclude<HomeownerTryPageState, { ok: false }>;
   restoredGeneration?: TryGenerationViewState | null;
   autoSavedProject?: boolean;
   startNewProject?: boolean;
+  startNewToken?: string;
+  /** When true, admin-only preview styles (e.g. Coastal Beach House) appear in the picker. */
+  viewerIsAdmin?: boolean;
 }) {
-  const [selectedStyle, setSelectedStyle] = useState<(typeof BATHROOM_STYLES)[number]["id"] | null>(null);
+  const bathroomStylesForTry = useMemo(
+    () => getTryPageBathroomStyles({ includeAdminOnly: viewerIsAdmin }),
+    [viewerIsAdmin],
+  );
+  const [selectedStyle, setSelectedStyle] = useState<BathroomStyleId | null>(null);
   const [userDescription, setUserDescription] = useState("");
   const [step, setStep] = useState<"style" | "upload" | "result" | "connect">("style");
   const [showAllStyles, setShowAllStyles] = useState(false);
@@ -236,7 +254,6 @@ export function HomeownerTryClient({
   } | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
-  const [saveModalOpen, setSaveModalOpen] = useState(false);
   /** Compare slider / split left side: original upload or a saved mockup id (display-only). */
   const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
@@ -251,7 +268,6 @@ export function HomeownerTryClient({
   const [versionState, versionAction, versionPending] = useActionState(selectTryMockupVersionAction, undefined);
   const [connectState, connectAction] = useActionState(trackConnectClickedAction, undefined);
   const [leadState, leadAction, leadPending] = useActionState(submitBathroomLeadAction, undefined);
-  const [saveState, saveAction, savePending] = useActionState(saveMyProjectAction, undefined);
 
   useEffect(() => {
     setStoredAttribution(getStoredAttribution());
@@ -269,6 +285,19 @@ export function HomeownerTryClient({
       toast.success("Project saved");
     }
   }, [autoSavedProject]);
+
+  useEffect(() => {
+    if (!startNewProject) return;
+    setGeneration(null);
+    setSelectedStyle(null);
+    setUserDescription("");
+    setLeadSubmitted(false);
+    setLeadOpen(false);
+    setQuickStyleSwitchMode(false);
+    setCompareBeforeSelection("original");
+    setFirstUploadPreviewUrl(null);
+    setStep("style");
+  }, [startNewProject, startNewToken]);
 
   useEffect(() => {
     if (generateState && "success" in generateState && generateState.success) {
@@ -290,6 +319,7 @@ export function HomeownerTryClient({
         prev
           ? {
               ...prev,
+              uploadedImageUrl: regenState.uploadedImageUrl || prev.uploadedImageUrl,
               generatedImageUrl: regenState.generatedImageUrl,
               selectedStyle: regenState.selectedStyle,
               styleName: regenState.styleName,
@@ -358,25 +388,9 @@ export function HomeownerTryClient({
     }
   }, [leadState]);
 
-  useEffect(() => {
-    if (!saveState) return;
-    if ("success" in saveState && saveState.success) {
-      toast.success("Project saved");
-      setSaveModalOpen(false);
-      return;
-    }
-    if ("requiresAuth" in saveState && saveState.requiresAuth) {
-      setSaveModalOpen(true);
-      return;
-    }
-    if ("error" in saveState && saveState.error) {
-      toast.error("Could not save project", { description: saveState.error.slice(0, 220) });
-    }
-  }, [saveState]);
-
   const selectedStyleConfig = useMemo(
-    () => BATHROOM_STYLES.find((s) => s.id === selectedStyle) ?? null,
-    [selectedStyle],
+    () => bathroomStylesForTry.find((s) => s.id === selectedStyle) ?? null,
+    [bathroomStylesForTry, selectedStyle],
   );
 
   const progressText = useMemo(() => {
@@ -474,20 +488,25 @@ export function HomeownerTryClient({
     return row?.imageUrl ?? generation.uploadedImageUrl;
   }, [generation, compareBeforeSelection]);
 
-  const primaryStyleIds: Array<(typeof BATHROOM_STYLES)[number]["id"]> = [
-    "spa_retreat",
-    "luxury_escape",
-    "warm_minimalist",
-  ];
-  const primaryStyles = BATHROOM_STYLES.filter((style) => primaryStyleIds.includes(style.id));
-  const additionalStyles = BATHROOM_STYLES.filter((style) => !primaryStyleIds.includes(style.id));
+  /** Label for the mockup version used as the base image when using &quot;Update preview&quot; (matches Right (after)). */
+  const activeRightAfterVersionLabel = useMemo(() => {
+    if (!generation?.mockupVersions?.length) return "";
+    const row =
+      generation.mockupVersions.find((v) => v.id === generation.activeMockupId) ??
+      generation.mockupVersions[0];
+    if (!row) return "";
+    return formatVersionLabel(row.label, generation.selectedStyle, generation.styleName);
+  }, [generation]);
+
+  const primaryStyleIds: BathroomStyleId[] = ["spa_retreat", "luxury_escape", "warm_minimalist"];
+  const primaryStyles = bathroomStylesForTry.filter((style) => primaryStyleIds.includes(style.id));
+  const additionalStyles = bathroomStylesForTry.filter((style) => !primaryStyleIds.includes(style.id));
   const stylesToRender = showAllStyles ? [...primaryStyles, ...additionalStyles] : primaryStyles;
-  const styleCardLabelById: Partial<Record<(typeof BATHROOM_STYLES)[number]["id"], string>> = {
+  const styleCardLabelById: Partial<Record<BathroomStyleId, string>> = {
     luxury_escape: "Modern Luxury",
   };
-  const displayStyleName = (styleId: (typeof BATHROOM_STYLES)[number]["id"], fallback: string) =>
+  const displayStyleName = (styleId: BathroomStyleId, fallback: string) =>
     styleCardLabelById[styleId] ?? fallback;
-  const authSaveState = saveState && "requiresAuth" in saveState ? saveState : null;
   const attributionJson = storedAttribution ? JSON.stringify(storedAttribution) : "";
 
   useEffect(() => {
@@ -539,6 +558,11 @@ export function HomeownerTryClient({
               {stylesToRender.map((style) => (
                 <article key={style.id} className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
                   <div className="relative aspect-[4/3] bg-muted">
+                    {style.adminOnly ? (
+                      <span className="absolute left-3 top-3 z-10 rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+                        Admin preview
+                      </span>
+                    ) : null}
                     {style.id === "spa_retreat" ? (
                       <span className="absolute left-3 top-3 z-10 rounded-full bg-renovision-orange px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
                         Most Popular
@@ -580,6 +604,14 @@ export function HomeownerTryClient({
                       <Image
                         src={afterWarmImage}
                         alt="Warm Minimalist bathroom inspiration"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 1024px) 100vw, 33vw"
+                      />
+                    ) : style.id === "coastal_beach_house" ? (
+                      <Image
+                        src={afterCleanImage}
+                        alt="Coastal Beach House bathroom inspiration"
                         fill
                         className="object-cover"
                         sizes="(max-width: 1024px) 100vw, 33vw"
@@ -813,6 +845,21 @@ export function HomeownerTryClient({
                 <p className="text-sm text-destructive">{versionState.error}</p>
               ) : null}
               <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Regenerate (below):</span> builds a new preview from your{" "}
+                <span className="font-medium text-foreground">original bathroom photo</span>, not from{" "}
+                <span className="font-medium text-foreground">Right (after)</span>.
+              </p>
+              <form action={regenAction} className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
+                <input type="hidden" name="generation_id" value={generation.generationId} />
+                <input type="hidden" name="project_id" value={generation.projectId} />
+                <input type="hidden" name="selected_style" value={generation.selectedStyle} />
+                <input type="hidden" name="image_source" value="original" />
+                <input type="hidden" name="attribution_json" value={attributionJson} />
+                <Button type="submit" variant="outline" className="rounded-xl sm:w-auto" disabled={regenPending}>
+                  {regenPending ? "Regenerating..." : "Regenerate (New Version)"}
+                </Button>
+              </form>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
@@ -824,6 +871,24 @@ export function HomeownerTryClient({
                   <input type="hidden" name="image_source" value="current_mockup" />
                   <input type="hidden" name="source_mockup_id" value={generation.activeMockupId} />
                   <input type="hidden" name="attribution_json" value={attributionJson} />
+
+                  <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Update preview will edit:</span>{" "}
+                    {activeRightAfterVersionLabel ? (
+                      <>
+                        <span className="font-medium text-foreground">{activeRightAfterVersionLabel}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — the image for whatever you selected in <span className="font-medium text-foreground">Right (after)</span>{" "}
+                          above. Change that dropdown first if you want to tweak a different version.
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        the preview selected in <span className="font-medium text-foreground">Right (after)</span> above.
+                      </>
+                    )}
+                  </p>
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div
@@ -918,13 +983,11 @@ export function HomeownerTryClient({
                   </div>
 
                   <div className="flex flex-col gap-3 border-t border-border/60 pt-5">
-                    <Button
-                      type="submit"
-                      disabled={regenPending}
-                      className="h-12 w-full rounded-xl text-base font-semibold shadow-md sm:h-11 sm:max-w-xs"
-                    >
-                      {regenPending ? "Updating preview…" : "Update preview"}
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <Button type="submit" disabled={regenPending} className="h-12 w-full rounded-xl text-base font-semibold shadow-md sm:h-11 sm:min-w-[11rem]">
+                        {regenPending ? "Updating preview…" : "Update preview"}
+                      </Button>
+                    </div>
                   </div>
                 </form>
                 {regenState && "error" in regenState ? (
@@ -959,9 +1022,6 @@ export function HomeownerTryClient({
                   />
                 </summary>
                 <div className="space-y-5 border-t border-border/60 bg-background/60 px-4 pb-5 pt-4 sm:px-6 sm:pb-6">
-                  <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Prompt profile:</span> {activePromptProfile}
-                  </p>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Split</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -1033,19 +1093,6 @@ export function HomeownerTryClient({
                       </ul>
                     </div>
                   ) : null}
-                  <form action={regenAction} className="flex flex-col gap-2 border-t border-border/50 pt-4">
-                    <input type="hidden" name="generation_id" value={generation.generationId} />
-                    <input type="hidden" name="project_id" value={generation.projectId} />
-                    <input type="hidden" name="selected_style" value={generation.selectedStyle} />
-                    <input type="hidden" name="image_source" value="original" />
-                    <input type="hidden" name="attribution_json" value={attributionJson} />
-                    <Button type="submit" variant="outline" className="w-full rounded-xl sm:w-auto" disabled={regenPending}>
-                      {regenPending ? "Regenerating..." : "Regenerate from photo"}
-                    </Button>
-                    {regenState && "error" in regenState ? (
-                      <p className="text-sm text-destructive">{regenState.error}</p>
-                    ) : null}
-                  </form>
                 </div>
               </details>
             </div>
@@ -1082,7 +1129,6 @@ export function HomeownerTryClient({
                     setUserDescription("");
                     setLeadSubmitted(false);
                     setLeadOpen(false);
-                    setSaveModalOpen(false);
                     setQuickStyleSwitchMode(false);
                     setCompareBeforeSelection("original");
                     setStep("style");
@@ -1090,16 +1136,8 @@ export function HomeownerTryClient({
                 >
                   Start New Project
                 </Button>
-                <form action={saveAction} className="w-full sm:w-auto">
-                  <input type="hidden" name="generation_id" value={generation.generationId} />
-                  <input type="hidden" name="project_id" value={generation.projectId} />
-                  <input type="hidden" name="attribution_json" value={attributionJson} />
-                  <Button type="submit" variant="secondary" className="w-full rounded-xl sm:w-auto" disabled={savePending}>
-                    {savePending ? "Saving..." : "Save My Project"}
-                  </Button>
-                </form>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">Save this design and come back anytime.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Sign in to keep your project history and versions.</p>
               <p className="mt-2 text-xs text-muted-foreground">No contractor contact unless you request it.</p>
             </div>
           </section>
@@ -1221,43 +1259,6 @@ export function HomeownerTryClient({
         ) : null}
       </div>
 
-      {saveModalOpen && authSaveState ? (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
-            <h3 className="text-xl font-semibold">Save your remodel design</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Create a free account so you can come back to your bathroom, styles, estimates, and remodel request later.
-            </p>
-            <div className="mt-4 space-y-2">
-              <a
-                href={authSaveState.magicLinkPath}
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white"
-              >
-                Save My Project with Magic Link
-              </a>
-              <a
-                href={authSaveState.signupPath}
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm font-semibold"
-              >
-                Save My Project with Email
-              </a>
-              <a
-                href={authSaveState.loginPath}
-                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 text-sm"
-              >
-                I already have an account
-              </a>
-            </div>
-            <button
-              type="button"
-              className="mt-3 w-full text-sm text-muted-foreground"
-              onClick={() => setSaveModalOpen(false)}
-            >
-              Not now
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

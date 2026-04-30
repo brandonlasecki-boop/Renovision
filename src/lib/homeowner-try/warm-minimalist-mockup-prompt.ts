@@ -2,6 +2,8 @@
  * Primary creative brief for /try **Warm Minimalist** mockups (Vertex: Gemini image edit — same packaging as other styles).
  * Drives `buildGenerationPrompt` and the Vertex-only image prompt so the long brief is not buried by generic stacks.
  */
+import { buildWetZoneVertexOverrideBanner } from "@/lib/homeowner-try/wet-zone-intent";
+
 export const WARM_MINIMALIST_MOCKUP_USER_PROMPT = `You are editing a real bathroom photo.
 
 Your goal is to create a realistic, buildable, WARM MINIMALIST remodel — NOT redesign the space.
@@ -52,7 +54,7 @@ You MUST:
 - NOT move plumbing locations
 
 If any fixture is partially hidden:
-→ it must remain partially hidden in the SAME way
+→ keep the same edge-crop context (do not zoom/reframe to fully reveal it)
 
 ---
 
@@ -68,7 +70,7 @@ Maintain exact spacing between all elements.
 
 📏 REALISM RULES
 
-- Do NOT enlarge or upscale fixtures
+- Do not change fixture size unless explicitly requested by homeowner notes/tweaks
 - Everything must fit within the same physical dimensions
 - All improvements must be realistic and buildable
 
@@ -79,7 +81,7 @@ Maintain exact spacing between all elements.
 You MUST clearly upgrade the bathroom while keeping it simple and refined.
 
 You MUST:
-- Replace pedestal sink with a clean, modern vanity (same position and width)
+- Replace pedestal sink with a clean, modern vanity (same wall position; width may increase when explicitly requested)
 - Use natural wood or light wood tones for the vanity
 - Upgrade flooring to warm neutral tile
 - Upgrade shower walls with simple, clean tile
@@ -149,9 +151,14 @@ export function buildVertexWarmMinimalistTryImageEditPrompt(opts: {
   quoteLineContext: string;
   /** OpenAI “remodel edit” paragraph(s) — secondary context only. */
   remodelEditFromVision: string;
+  wetZoneRemodelIntent?: boolean;
 }): string {
   const tail = additionalPromptAfterWarmMinimalistBase(opts.additionalPrompt);
-  const blocks: string[] = [WARM_MINIMALIST_MOCKUP_USER_PROMPT];
+  const blocks: string[] = [];
+  if (opts.wetZoneRemodelIntent) {
+    blocks.push(buildWetZoneVertexOverrideBanner());
+  }
+  blocks.push(WARM_MINIMALIST_MOCKUP_USER_PROMPT);
   const scope = opts.scopeDescription.trim();
   if (scope) {
     blocks.push(
@@ -169,11 +176,17 @@ export function buildVertexWarmMinimalistTryImageEditPrompt(opts: {
   const visionRemodel = opts.remodelEditFromVision.trim();
   if (visionRemodel) {
     blocks.push(
-      `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
+      opts.wetZoneRemodelIntent
+        ? `OpenAI remodel notes (wet-zone changes allowed — homeowner + notes win for tub/shower):\n${visionRemodel.slice(0, 2000)}`
+        : `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
     );
   }
   if (tail) {
-    blocks.push(`This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 8000)}`);
+    blocks.push(
+      opts.wetZoneRemodelIntent
+        ? `This run (homeowner — apply tub/shower changes exactly as written):\n${tail.slice(0, 12000)}`
+        : `This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 12000)}`,
+    );
   }
   return blocks.join("\n\n");
 }

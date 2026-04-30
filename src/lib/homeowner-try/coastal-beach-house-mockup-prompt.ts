@@ -1,12 +1,9 @@
-/**
- * Primary creative brief for /try **Clean Refresh** mockups (Vertex: Gemini image edit — same packaging as other styles).
- * Drives `buildGenerationPrompt` and the Vertex-only image prompt so the long brief is not buried by generic stacks.
- */
 import { buildWetZoneVertexOverrideBanner } from "@/lib/homeowner-try/wet-zone-intent";
 
-export const CLEAN_REFRESH_MOCKUP_USER_PROMPT = `You are editing a real bathroom photo.
+/** Primary remodel brief for Coastal Beach House — geometry + coastal finishes (Vertex image edit). */
+export const COASTAL_BEACH_HOUSE_MOCKUP_USER_PROMPT = `You are editing a real bathroom photo.
 
-Your goal is to create a realistic, buildable, CLEAN MODERN remodel — NOT redesign the space.
+Your goal is to create a realistic, buildable, COASTAL BEACH HOUSE remodel — NOT redesign the space.
 
 ---
 
@@ -54,7 +51,7 @@ You MUST:
 - NOT move plumbing locations
 
 If any fixture is partially hidden:
-→ keep the same edge-crop context (do not zoom/reframe to fully reveal it)
+→ it must remain partially hidden in the SAME way
 
 ---
 
@@ -62,58 +59,62 @@ If any fixture is partially hidden:
 
 - The shower opening width must match the original EXACTLY
 - Glass panels must NOT extend beyond the original footprint
-- Do NOT widen or optimize the shower
+- Do NOT widen, expand, or optimize the shower
 
-Maintain exact spacing between all objects.
+Maintain exact spacing between all elements.
 
 ---
 
 📏 REALISM RULES
 
-- Do not change fixture size unless explicitly requested by homeowner notes/tweaks
+- Do NOT enlarge or upscale fixtures
 - Everything must fit within the same physical dimensions
-- All improvements must be realistic and affordable
+- All improvements must be realistic and buildable
 
 ---
 
 🔥 REQUIRED TRANSFORMATION
 
-You MUST upgrade the bathroom clearly, but keep it realistic and cost-conscious.
+You MUST clearly upgrade the bathroom while preserving structure.
 
 You MUST:
-- Replace pedestal sink with a simple modern vanity (same wall position; width may increase when explicitly requested)
-- Upgrade flooring to clean, affordable tile
-- Upgrade shower walls to simple, modern tile
-- Upgrade lighting to clean, modern fixtures
+- Replace pedestal sink with a clean coastal-style vanity (same position and width)
+- Upgrade flooring to light, beach-inspired tile
+- Upgrade shower walls with clean, bright tile
+- Upgrade lighting to soft, natural-feeling fixtures
 - Remove clutter completely
-- Simplify window treatments (clean, minimal)
+- Simplify or replace window treatments with a light, airy version
 
-Avoid dramatic or expensive upgrades.
+The transformation must be clearly visible.
 
 ---
 
-🧼 STYLE: CLEAN MODERN (SIMPLE + RELATABLE)
+🌊 STYLE: COASTAL BEACH HOUSE (BRIGHT + AIRY)
 
-Apply a clean, modern design using:
+Apply a coastal design using:
 
-- white, light gray, or soft neutral tones
-- simple, practical materials
-- clean tile (subway tile or large format)
-- basic modern vanity (not luxury)
-- chrome or simple black fixtures
-- bright, even lighting
+- light, airy colors (white, soft blue, sand, light gray)
+- natural textures (light wood, woven elements, linen)
+- bright, fresh lighting (natural feel)
+- clean white or soft blue tile
+- light wood or white vanity
+
+Optional subtle decor:
+- small plant
+- woven basket
+- simple coastal accents
 
 The space should feel:
-- clean
 - fresh
-- simple
-- achievable
+- airy
+- relaxing
+- like a beach house
 
 Avoid:
-- luxury marble finishes
-- dramatic contrast
-- heavy decor
-- spa-like warmth
+- dark heavy tones
+- high contrast dramatic styles
+- overly luxurious marble everywhere
+- clutter
 
 ---
 
@@ -122,15 +123,15 @@ Avoid:
 The final image must:
 - look like the SAME bathroom
 - maintain exact geometry and proportions
-- feel like a clean, realistic upgrade
-- be clearly improved but affordable
-- be something a typical homeowner could actually do
+- feel like a bright, coastal transformation
+- be realistic and buildable
+- show a noticeable but believable upgrade
 
 This is a remodel, NOT a redesign.`;
 
-/** When /try passes the clean-refresh base plus extra notes, avoid duplicating the long block in the Vertex payload. */
-export function additionalPromptAfterCleanRefreshBase(fullAdditionalPrompt: string): string {
-  const base = CLEAN_REFRESH_MOCKUP_USER_PROMPT;
+/** When /try passes the coastal base plus extra notes, avoid duplicating the long block in the Vertex payload. */
+export function additionalPromptAfterCoastalBeachHouseBase(fullAdditionalPrompt: string): string {
+  const base = COASTAL_BEACH_HOUSE_MOCKUP_USER_PROMPT;
   const t = fullAdditionalPrompt.trimStart();
   if (t.startsWith(base)) {
     return t.slice(base.length).replace(/^[\s\n]+/, "").trim();
@@ -138,25 +139,20 @@ export function additionalPromptAfterCleanRefreshBase(fullAdditionalPrompt: stri
   return fullAdditionalPrompt.trim();
 }
 
-/**
- * Vertex / Gemini image edit: keep the clean-refresh brief dominant. The generic `buildImageEditPrompt` stack is long and
- * can truncate or bury the style instructions after `truncateMockupTextPromptWithLayoutReinforcement`.
- */
-export function buildVertexCleanRefreshTryImageEditPrompt(opts: {
+export function buildVertexCoastalBeachHouseTryImageEditPrompt(opts: {
   scopeDescription: string;
   roomAnalysis: string;
   additionalPrompt: string;
   quoteLineContext: string;
-  /** OpenAI “remodel edit” paragraph(s) — secondary context only. */
   remodelEditFromVision: string;
   wetZoneRemodelIntent?: boolean;
 }): string {
-  const tail = additionalPromptAfterCleanRefreshBase(opts.additionalPrompt);
+  const tail = additionalPromptAfterCoastalBeachHouseBase(opts.additionalPrompt);
   const blocks: string[] = [];
   if (opts.wetZoneRemodelIntent) {
     blocks.push(buildWetZoneVertexOverrideBanner());
   }
-  blocks.push(CLEAN_REFRESH_MOCKUP_USER_PROMPT);
+  blocks.push(COASTAL_BEACH_HOUSE_MOCKUP_USER_PROMPT);
   const scope = opts.scopeDescription.trim();
   if (scope) {
     blocks.push(

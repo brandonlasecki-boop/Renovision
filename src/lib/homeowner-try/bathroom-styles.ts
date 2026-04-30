@@ -3,7 +3,8 @@ export type BathroomStyleId =
   | "clean_refresh"
   | "luxury_escape"
   | "bold_modern"
-  | "warm_minimalist";
+  | "warm_minimalist"
+  | "coastal_beach_house";
 
 export type BathroomStyleConfig = {
   id: BathroomStyleId;
@@ -18,6 +19,8 @@ export type BathroomStyleConfig = {
   fixturesMin: number;
   fixturesMax: number;
   scopeSeed: string;
+  /** When true, style appears on /try only for admin viewers until launched. */
+  adminOnly?: boolean;
 };
 
 export const BATHROOM_STYLES: BathroomStyleConfig[] = [
@@ -93,10 +96,32 @@ export const BATHROOM_STYLES: BathroomStyleConfig[] = [
     fixturesMax: 3800,
     scopeSeed: "warm minimalist bathroom with wood tones, soft neutral palette, and clean simple shapes",
   },
+  {
+    id: "coastal_beach_house",
+    name: "Coastal Beach House",
+    subtitle: "Bright, airy, beach-inspired (admin preview)",
+    estimateMin: 10000,
+    estimateMax: 20000,
+    materialMin: 3800,
+    materialMax: 7500,
+    laborMin: 5000,
+    laborMax: 9500,
+    fixturesMin: 1400,
+    fixturesMax: 3500,
+    scopeSeed:
+      "coastal beach house bathroom with light airy colors, soft blue and sand tones, light wood or white vanity, bright natural-feeling tile, woven textures, and relaxed beach-house character while preserving layout",
+    adminOnly: true,
+  },
 ];
 
 export function getBathroomStyleById(id: string): BathroomStyleConfig | null {
   return BATHROOM_STYLES.find((s) => s.id === id) ?? null;
+}
+
+/** Styles shown on /try style picker (optionally include admin-only previews). */
+export function getTryPageBathroomStyles(options: { includeAdminOnly: boolean }): BathroomStyleConfig[] {
+  if (options.includeAdminOnly) return BATHROOM_STYLES;
+  return BATHROOM_STYLES.filter((s) => !s.adminOnly);
 }
 
 /** DB `selected_style` is usually the style display name; accept id as well. */

@@ -7,7 +7,10 @@ import {
   FinishReason,
   type GenerateContentConfig,
 } from "@google/genai";
-import { truncateMockupTextPromptWithLayoutReinforcement } from "@/lib/ai/mockup-prompt-truncate";
+import {
+  MOCKUP_PROMPT_TRUNCATE_MARKER,
+  truncateMockupTextPromptWithLayoutReinforcement,
+} from "@/lib/ai/mockup-prompt-truncate";
 import { VERTEX_GEMINI_IMAGE_MODEL_ID } from "@/lib/ai/mockup-image-provider";
 import { loadVercelWorkloadIdentityGoogleAuthOptions } from "@/lib/ai/vercel-wif-vertex-auth";
 import { productReferenceImageFetchCandidateUrls } from "@/lib/integrations/retail-product-image-lightbox";
@@ -358,6 +361,8 @@ export function buildVertexRemodelMockupRequestParts(params: {
   editPrompt: string;
   referenceInlineImages?: VertexMockupReferenceInline[];
   vanityCabinetReplacement?: boolean;
+  /** `/try` Update preview — alternate truncation suffix so last-seen layout lines do not veto tweaks. */
+  homeownerMockupTweak?: boolean;
 }): VertexRemodelMockupBuiltRequest {
   const b64 = Buffer.from(new Uint8Array(params.imageBytes)).toString("base64");
   const mime = params.contentType.split(";")[0]?.trim() || "image/jpeg";
@@ -381,6 +386,8 @@ export function buildVertexRemodelMockupRequestParts(params: {
   const prompt = truncateMockupTextPromptWithLayoutReinforcement(
     universalRoomPreamble + preamble + params.editPrompt + refReminder,
     VERTEX_MOCKUP_TEXT_PROMPT_MAX,
+    MOCKUP_PROMPT_TRUNCATE_MARKER,
+    { homeownerMockupTweak: params.homeownerMockupTweak === true },
   );
 
   const refParts: VertexGeminiUserContentPart[] = [];
@@ -488,6 +495,8 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
   referenceInlineImages?: VertexMockupReferenceInline[];
   /** Quote includes supply/install of a new vanity cabinet — relax “skins only” preamble for that case. */
   vanityCabinetReplacement?: boolean;
+  /** `/try` mockup tweak — use tweak-friendly layout reinforcement after truncation. */
+  homeownerMockupTweak?: boolean;
 }): Promise<ArrayBuffer> {
   const model = params.model?.trim() || VERTEX_GEMINI_IMAGE_MODEL_ID;
   const projectId = params.projectId.trim();
@@ -522,6 +531,7 @@ export async function fetchRoomRemodelImageEditVertexGemini(params: {
     editPrompt: params.editPrompt,
     referenceInlineImages: params.referenceInlineImages,
     vanityCabinetReplacement: params.vanityCabinetReplacement,
+    homeownerMockupTweak: params.homeownerMockupTweak,
   });
   const { parts } = built;
 

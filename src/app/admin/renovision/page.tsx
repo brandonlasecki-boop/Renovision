@@ -20,6 +20,50 @@ import {
 } from "@/lib/data/renovision-admin-dashboard";
 import { cn } from "@/lib/utils";
 
+function PageSection({
+  title,
+  description,
+  id,
+  children,
+}: {
+  title: string;
+  description?: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-28 space-y-5">
+      <header className="space-y-1.5 border-b border-border/60 pb-4">
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
+        {description ? (
+          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+        ) : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function TableShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
+      <div className="border-b border-border/60 bg-gradient-to-r from-muted/35 via-muted/20 to-transparent px-4 py-3.5 sm:px-5">
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+        {subtitle ? <p className="mt-1 text-xs leading-snug text-muted-foreground">{subtitle}</p> : null}
+      </div>
+      <div className="overflow-x-auto">{children}</div>
+    </div>
+  );
+}
+
 export const metadata = {
   title: "Renovision control center",
   robots: { index: false, follow: false },
@@ -40,10 +84,16 @@ function MetricCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+    <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-5 shadow-sm ring-1 ring-black/[0.02] transition-shadow hover:shadow-md dark:ring-white/[0.04]">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-renovision-orange/70 via-renovision-teal/50 to-transparent opacity-60"
+        aria-hidden
+      />
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</p>
+      <p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight text-foreground sm:text-[1.75rem]">
+        {value}
+      </p>
+      {hint ? <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -67,22 +117,41 @@ function TrendBars({
   const vals = points.map((p) => trendMetric(p, keyField));
   const max = Math.max(1, ...vals);
   return (
-    <div className="flex h-36 items-end gap-1">
+    <div className="flex h-40 items-end gap-0.5 rounded-lg bg-muted/20 px-1 pb-1 pt-3 sm:gap-1">
       {points.map((p) => {
         const v = trendMetric(p, keyField);
         const h = Math.round((v / max) * 100);
         return (
-          <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+          <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
             <div
-              className={cn("w-full max-w-[28px] rounded-t-md transition-opacity", colorClass)}
-              style={{ height: `${Math.max(4, h)}%` }}
+              className={cn(
+                "w-full max-w-[32px] rounded-t-md shadow-sm transition-transform hover:scale-[1.02]",
+                colorClass,
+              )}
+              style={{ height: `${Math.max(6, h)}%`, minHeight: "4px" }}
               title={`${p.label}: ${v}`}
             />
-            <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{p.label}</span>
+            <span className="hidden max-w-full truncate text-center text-[10px] font-medium text-muted-foreground sm:block">
+              {p.label}
+            </span>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function PreviewThumb({ href, label }: { href: string; label: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="group inline-flex items-center gap-2">
+      <img
+        src={href}
+        alt={label}
+        loading="lazy"
+        className="h-12 w-16 rounded border border-border/60 object-cover transition-opacity group-hover:opacity-80"
+      />
+      <span className="text-xs text-renovision-navy underline-offset-2 group-hover:underline">Open</span>
+    </a>
   );
 }
 
@@ -154,50 +223,75 @@ export default async function RenovisionAdminPage({
   };
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Renovision control center</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Homeowner /try usage, conversion, and remodeler interest. Data is aggregated server-side from Supabase
-            (service role). Grant admin with{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">profiles.is_admin</code> or{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">ADMIN_EMAILS</code>.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              ["7d", "Last 7 days"],
-              ["30d", "Last 30 days"],
-              ["all", "All time"],
-            ] as const
-          ).map(([r, label]) => (
-            <Link
-              key={r}
-              href={rangeHref(r)}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                range === r
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border/80 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              {label}
-            </Link>
-          ))}
+    <div className="space-y-12 sm:space-y-14">
+      <div className="relative overflow-hidden rounded-2xl border border-border/70 bg-card p-6 shadow-sm ring-1 ring-black/[0.03] sm:p-8 dark:ring-white/[0.04]">
+        <div
+          className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-renovision-orange/[0.07] blur-3xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-renovision-navy dark:text-renovision-orange">
+              Analytics
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Renovision control center</h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Homeowner <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">/try</code> usage,
+              conversion, and remodeler interest. Aggregated server-side from Supabase (service role). Admin access:{" "}
+              <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">profiles.is_admin</code> or{" "}
+              <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">ADMIN_EMAILS</code>.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Date range</p>
+            <div className="inline-flex flex-wrap rounded-xl border border-border/80 bg-muted/30 p-1 shadow-inner">
+              {(
+                [
+                  ["7d", "7 days"],
+                  ["30d", "30 days"],
+                  ["all", "All time"],
+                ] as const
+              ).map(([r, label]) => (
+                <Link
+                  key={r}
+                  href={rangeHref(r)}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                    range === r
+                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/70"
+                      : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {loadError ? (
-        <div className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {loadError}
+        <div
+          className="rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-4 text-sm text-destructive shadow-sm"
+          role="alert"
+        >
+          <p className="font-semibold">Could not load Renovision analytics</p>
+          <p className="mt-1 opacity-90">{loadError}</p>
         </div>
       ) : null}
 
       {overview ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <PageSection
+            title="Overview"
+            description="Key counts and conversion rates for the selected range. Totals refresh when you change the date window above."
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <MetricCard
+              title="Homepage visitors (today)"
+              value={overview.uniqueHomeVisitorsToday}
+              hint="Unique people who loaded the main page today"
+            />
             <MetricCard
               title="Guest sessions"
               value={overview.totalAnonymousSessions}
@@ -241,101 +335,136 @@ export default async function RenovisionAdminPage({
               value={pctLabel(overview.conversionSignupToRemodeler)}
               hint="Requests in range / signups in range (or all accounts when all-time)"
             />
-          </section>
-
-          <section className="space-y-4 rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">Activity trends</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {range === "all" ? "Last 12 months (monthly)" : range === "7d" ? "Last 7 days (daily)" : "Last 30 days (daily)"}
-              </p>
             </div>
-            <div className="grid gap-8 lg:grid-cols-2">
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Guest sessions</p>
-                <TrendBars points={trends} keyField="anonymousSessions" colorClass="bg-renovision-orange/80" />
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">First previews</p>
-                <TrendBars points={trends} keyField="firstMockups" colorClass="bg-renovision-teal/80" />
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Signups</p>
-                <TrendBars points={trends} keyField="signups" colorClass="bg-foreground/70" />
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Connect Me leads</p>
-                <TrendBars points={trends} keyField="remodelerRequests" colorClass="bg-violet-500/75" />
+          </PageSection>
+
+          <PageSection
+            title="Activity trends"
+            description={
+              range === "all"
+                ? "Last 12 months, one bar per month."
+                : range === "7d"
+                  ? "Last 7 days, one bar per day."
+                  : "Last 30 days, one bar per day."
+            }
+          >
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm ring-1 ring-black/[0.03] sm:p-6 dark:ring-white/[0.04]">
+              <div className="grid gap-8 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Guest sessions
+                  </p>
+                  <TrendBars points={trends} keyField="anonymousSessions" colorClass="bg-renovision-orange/80" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    First previews
+                  </p>
+                  <TrendBars points={trends} keyField="firstMockups" colorClass="bg-renovision-teal/80" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Signups</p>
+                  <TrendBars points={trends} keyField="signups" colorClass="bg-foreground/70" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Connect Me leads
+                  </p>
+                  <TrendBars points={trends} keyField="remodelerRequests" colorClass="bg-violet-500/75" />
+                </div>
               </div>
             </div>
-          </section>
+          </PageSection>
 
-          <section className="grid gap-6 lg:grid-cols-2">
-            <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-              <h2 className="text-lg font-semibold tracking-tight">Funnel</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Counts for the selected range (see card subtitles).</p>
-              <ol className="mt-6 space-y-4">
-                {funnel.map((step, i) => (
-                  <li key={step.id} className="flex items-start gap-3">
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                      {i + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
+          <PageSection
+            title="Funnel & activity"
+            description="Step-through counts for the range, plus the busiest projects and guest sessions."
+          >
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
+                <h3 className="text-base font-semibold tracking-tight">Funnel</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Ordered steps for the selected range (definitions match metric cards).
+                </p>
+                <ol className="relative mt-6 space-y-0 border-l-2 border-border/60 pl-6">
+                  {funnel.map((step, i) => (
+                    <li key={step.id} className="relative pb-8 last:pb-0">
+                      <span className="absolute -left-[1.4rem] top-0 flex size-7 items-center justify-center rounded-full border-2 border-background bg-renovision-navy text-xs font-bold text-white shadow-sm">
+                        {i + 1}
+                      </span>
                       <p className="text-sm font-medium leading-snug">{step.label}</p>
-                      <p className="mt-1 text-2xl font-semibold tabular-nums">{step.count}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-                <h2 className="text-lg font-semibold tracking-tight">Most active projects</h2>
-                <ul className="mt-4 space-y-3 text-sm">
-                  {activeProjects.length === 0 ? (
-                    <li className="text-muted-foreground">No preview runs yet.</li>
-                  ) : (
-                    activeProjects.map((p) => (
-                      <li key={p.projectId} className="flex items-center justify-between gap-2 border-b border-border/40 pb-2 last:border-0 last:pb-0">
-                        <span className="truncate font-mono text-xs text-muted-foreground">{p.projectId.slice(0, 8)}…</span>
-                        <span className="shrink-0 tabular-nums font-medium">{p.mockupCount} runs</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
+                      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{step.count}</p>
+                    </li>
+                  ))}
+                </ol>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-                <h2 className="text-lg font-semibold tracking-tight">Most active guest sessions</h2>
-                <ul className="mt-4 space-y-3 text-sm">
-                  {activeSessions.length === 0 ? (
-                    <li className="text-muted-foreground">No sessions yet.</li>
-                  ) : (
-                    activeSessions.map((s) => (
-                      <li key={s.sessionId} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2 last:border-0 last:pb-0">
-                        <span className="font-mono text-xs text-muted-foreground">{s.sessionId.slice(0, 8)}…</span>
-                        <span className="text-xs text-muted-foreground">
-                          {s.initialUsed} first + {s.regenUsed} refinements
-                          {s.convertedToSignup ? (
-                            <span className="ml-2 rounded-full bg-renovision-teal/15 px-2 py-0.5 font-medium text-renovision-teal">
-                              Signed up
-                            </span>
-                          ) : null}
-                        </span>
-                      </li>
-                    ))
-                  )}
-                </ul>
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
+                  <h3 className="text-base font-semibold tracking-tight">Most active projects</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">By mockup run count.</p>
+                  <ul className="mt-4 divide-y divide-border/50 text-sm">
+                    {activeProjects.length === 0 ? (
+                      <li className="py-3 text-muted-foreground">No preview runs yet.</li>
+                    ) : (
+                      activeProjects.map((p) => (
+                        <li
+                          key={p.projectId}
+                          className="flex items-center justify-between gap-2 py-2.5 first:pt-0"
+                        >
+                          <span className="truncate font-mono text-xs text-muted-foreground">
+                            {p.projectId.slice(0, 8)}…
+                          </span>
+                          <span className="shrink-0 rounded-md bg-muted/60 px-2 py-0.5 tabular-nums text-xs font-semibold">
+                            {p.mockupCount} runs
+                          </span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm ring-1 ring-black/[0.03] dark:ring-white/[0.04]">
+                  <h3 className="text-base font-semibold tracking-tight">Most active guest sessions</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">Anonymous /try usage intensity.</p>
+                  <ul className="mt-4 divide-y divide-border/50 text-sm">
+                    {activeSessions.length === 0 ? (
+                      <li className="py-3 text-muted-foreground">No sessions yet.</li>
+                    ) : (
+                      activeSessions.map((s) => (
+                        <li
+                          key={s.sessionId}
+                          className="flex flex-wrap items-center justify-between gap-2 py-2.5 first:pt-0"
+                        >
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {s.sessionId.slice(0, 8)}…
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {s.initialUsed} first · {s.regenUsed} refinements
+                            {s.convertedToSignup ? (
+                              <span className="ml-2 rounded-full bg-renovision-teal/15 px-2 py-0.5 font-medium text-renovision-teal">
+                                Signed up
+                              </span>
+                            ) : null}
+                          </span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
               </div>
             </div>
-          </section>
+          </PageSection>
 
-          <section className="space-y-3">
+          <PageSection
+            title="Marketing & data tables"
+            description="Build tracked links, review daily performance, then filter detailed rows by id or email."
+          >
+            <div className="space-y-6">
             <MarketingLinkBuilder baseUrl="https://www.getrenovision.com" />
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
-                Daily link performance (per unique link id)
-              </h3>
+            <TableShell
+              title="Daily link performance"
+              subtitle="Per unique link id (src) and day — sessions, generations, saves, and leads."
+            >
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -383,46 +512,52 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">Tables</h2>
-              <form className="flex w-full max-w-md gap-2" action="/admin/renovision" method="get">
+            <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-muted/15 p-4 sm:flex-row sm:items-end sm:justify-between sm:p-5">
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight">Filter tables</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Applies to user, session, project, mockup, lead, and attribution lists below.
+                </p>
+              </div>
+              <form className="flex w-full max-w-md gap-2 sm:shrink-0" action="/admin/renovision" method="get">
                 <input type="hidden" name="range" value={range} />
                 <input
                   name="q"
                   defaultValue={q}
                   placeholder="Search id or email…"
-                  className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm shadow-sm"
+                  className="h-10 flex-1 rounded-xl border border-input bg-background px-3 text-sm shadow-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <button
                   type="submit"
-                  className="h-9 shrink-0 rounded-lg border border-border bg-muted/40 px-3 text-sm font-medium hover:bg-muted"
+                  className="h-10 shrink-0 rounded-xl border border-border bg-background px-4 text-sm font-semibold shadow-sm transition-colors hover:bg-muted"
                 >
-                  Filter
+                  Apply
                 </button>
               </form>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-              <h3 className="text-sm font-semibold">Session inspector</h3>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Paste a full anonymous session id to inspect attribution, projects, generations, leads, and events.
+            <div className="rounded-2xl border border-dashed border-renovision-navy/25 bg-renovision-navy/[0.03] p-4 shadow-sm sm:p-5 dark:border-renovision-orange/20 dark:bg-renovision-orange/[0.04]">
+              <h3 className="text-sm font-semibold tracking-tight">Session inspector</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Paste a full anonymous session UUID to load attribution, projects, generations, mockups, events, and
+                leads for that session.
               </p>
-              <form className="mt-3 flex w-full max-w-3xl gap-2" action="/admin/renovision" method="get">
+              <form className="mt-4 flex w-full flex-col gap-2 sm:max-w-3xl sm:flex-row" action="/admin/renovision" method="get">
                 <input type="hidden" name="range" value={range} />
                 <input type="hidden" name="q" value={q} />
                 <input
                   name="session"
                   defaultValue={sessionQuery}
                   placeholder="Session id (uuid)"
-                  className="h-9 flex-1 rounded-lg border border-input bg-background px-3 font-mono text-xs shadow-sm"
+                  className="h-10 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-xs shadow-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <button
                   type="submit"
-                  className="h-9 shrink-0 rounded-lg border border-border bg-muted/40 px-3 text-sm font-medium hover:bg-muted"
+                  className="h-10 shrink-0 rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-95 dark:bg-renovision-orange dark:text-renovision-navy"
                 >
-                  Inspect
+                  Inspect session
                 </button>
               </form>
               {sessionQuery && !sessionDrilldown ? (
@@ -591,8 +726,7 @@ export default async function RenovisionAdminPage({
               ) : null}
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">Users</h3>
+            <TableShell title="Users" subtitle="Registered accounts in range — project and mockup activity.">
               <table className="w-full min-w-[880px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -629,10 +763,9 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">Anonymous sessions</h3>
+            <TableShell title="Anonymous sessions" subtitle="Guest /try sessions — use Inspect to open the drill-down.">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -674,27 +807,33 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">Preview projects</h3>
-              <table className="w-full min-w-[960px] text-left text-sm">
+            <TableShell
+              title="Preview projects"
+              subtitle="Try projects with before photo, original prompt, and per-version preview thumbs."
+            >
+              <table className="w-full min-w-[1380px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="px-4 py-2 font-medium">Project</th>
                     <th className="px-4 py-2 font-medium">Created</th>
                     <th className="px-4 py-2 font-medium">Room</th>
                     <th className="px-4 py-2 font-medium">Owner</th>
+                    <th className="px-4 py-2 font-medium">Style</th>
                     <th className="px-4 py-2 font-medium">Total</th>
                     <th className="px-4 py-2 font-medium">First</th>
                     <th className="px-4 py-2 font-medium">Refines</th>
+                    <th className="px-4 py-2 font-medium">Original before</th>
+                    <th className="px-4 py-2 font-medium">Original prompt</th>
+                    <th className="px-4 py-2 font-medium">All images</th>
                     <th className="px-4 py-2 font-medium">Lead submitted</th>
                   </tr>
                 </thead>
                 <tbody>
                   {projects.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-6 text-muted-foreground">
+                      <td colSpan={12} className="px-4 py-6 text-muted-foreground">
                         No rows.
                       </td>
                     </tr>
@@ -715,21 +854,64 @@ export default async function RenovisionAdminPage({
                             "—"
                           )}
                         </td>
+                        <td className="px-4 py-2 text-xs">{p.selectedStyle ?? "—"}</td>
                         <td className="px-4 py-2 tabular-nums">{p.mockupCount}</td>
                         <td className="px-4 py-2 tabular-nums">{p.initialCount}</td>
                         <td className="px-4 py-2 tabular-nums">{p.regenCount}</td>
+                        <td className="px-4 py-2">
+                          {p.originalBeforeImageUrl ? (
+                            <PreviewThumb
+                              href={p.originalBeforeImageUrl}
+                              label={`Project ${p.projectId} original before image`}
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="max-w-[260px] px-4 py-2 text-xs text-muted-foreground">
+                          {p.originalUserPrompt ? (
+                            <span title={p.originalUserPrompt} className="line-clamp-3">
+                              {p.originalUserPrompt}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          {p.previewImages.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {p.previewImages.map((img) => (
+                                <div key={img.mockupId} className="rounded-md border border-border/50 p-1">
+                                  <PreviewThumb
+                                    href={img.imageUrl}
+                                    label={`Project ${p.projectId} image v${img.generationNumber}`}
+                                  />
+                                  <div className="mt-1 flex flex-col gap-0.5">
+                                    <span className="text-[10px] text-muted-foreground">
+                                      v{img.generationNumber} - {img.refinementType}
+                                    </span>
+                                    {img.customPrompt ? (
+                                      <span title={img.customPrompt} className="max-w-[180px] truncate text-[10px] text-muted-foreground">
+                                        Custom: {img.customPrompt}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-2">{p.remodelerRequested ? "Yes" : "—"}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
-                All mockups (user + guest)
-              </h3>
+            <TableShell title="All mockups" subtitle="Every saved preview version (signed-in and guest).">
               <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -766,12 +948,9 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
-                Connect Me lead requests
-              </h3>
+            <TableShell title="Connect Me lead requests" subtitle="Homeowner submissions from /try.">
               <table className="w-full min-w-[1200px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -818,12 +997,12 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableShell>
 
-            <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card shadow-sm">
-              <h3 className="border-b border-border/60 bg-muted/30 px-4 py-3 text-sm font-semibold">
-                Attribution (generated, saved, leads)
-              </h3>
+            <TableShell
+              title="Attribution"
+              subtitle="Recent rows tying marketing params to generations, saves, and leads."
+            >
               <table className="w-full min-w-[900px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
@@ -862,8 +1041,9 @@ export default async function RenovisionAdminPage({
                   )}
                 </tbody>
               </table>
+            </TableShell>
             </div>
-          </section>
+          </PageSection>
         </>
       ) : null}
     </div>

@@ -53,10 +53,11 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           src={afterUrl}
           alt="After remodel"
           fill
-          className="pointer-events-none object-cover"
-          sizes="(max-width: 1024px) 100vw, 1024px"
-          unoptimized
-          priority
+          className="pointer-events-none object-contain"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
+          quality={75}
+          priority={false}
+          loading="lazy"
           draggable={false}
         />
         <div
@@ -67,10 +68,11 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={beforeUrl}
             alt="Before remodel"
             fill
-            className="object-cover"
-            sizes="(max-width: 1024px) 100vw, 1024px"
-            unoptimized
-            priority
+            className="object-contain"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
+            quality={75}
+            priority={false}
+            loading="lazy"
             draggable={false}
           />
         </div>
@@ -109,16 +111,17 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         />
         <span className="text-xs text-muted-foreground">After</span>
       </div>
-      {/* Full before/after previews (especially helpful on small screens where the slider is one blended view). */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      {/* Extra previews are useful context on larger screens, but skipping them on phones avoids extra image decodes. */}
+      <div className="hidden grid-cols-2 gap-2 sm:grid sm:gap-3">
         <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
           <Image
             src={beforeUrl}
             alt="Before — full preview"
             fill
-            className="object-cover"
-            sizes="(max-width: 640px) 45vw, 400px"
-            unoptimized
+            className="object-contain"
+            sizes="(max-width: 1024px) 42vw, 400px"
+            quality={70}
+            loading="lazy"
             draggable={false}
           />
           <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
@@ -130,9 +133,10 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={afterUrl}
             alt="After — full preview"
             fill
-            className="object-cover"
-            sizes="(max-width: 640px) 45vw, 400px"
-            unoptimized
+            className="object-contain"
+            sizes="(max-width: 1024px) 42vw, 400px"
+            quality={70}
+            loading="lazy"
             draggable={false}
           />
           <figcaption className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">

@@ -49,6 +49,7 @@ function formatMonthLabel(iso: string): string {
 export type RenovisionAdminOverview = {
   range: RenovisionAdminRange;
   fromIso: string | null;
+  uniqueHomeVisitorsToday: number;
   totalAnonymousSessions: number;
   totalRegisteredUsers: number;
   totalSignupsInRange: number;
@@ -128,11 +129,50 @@ export type RenovisionAdminProjectRow = {
   userId: string | null;
   anonymousSessionId: string | null;
   convertedFromAnon: boolean;
+  selectedStyle: string | null;
+  originalUserPrompt: string | null;
   mockupCount: number;
   initialCount: number;
   regenCount: number;
+  originalBeforeImageUrl: string | null;
+  previewImages: Array<{
+    mockupId: string;
+    createdAt: string;
+    generationNumber: number;
+    imageUrl: string;
+    refinementType: string;
+    customPrompt: string | null;
+  }>;
   remodelerRequested: boolean;
 };
+
+function extractCustomTweakFromAdditionalPrompt(additionalPrompt: string): string | null {
+  const markerStart = "HOMEOWNER CUSTOM TWEAK (apply only compatible parts on top of everything above):";
+  const markerEnd = "INTERPRETATION RULES FOR THE CUSTOM TEXT:";
+  const start = additionalPrompt.indexOf(markerStart);
+  if (start < 0) return null;
+  const afterStart = additionalPrompt.slice(start + markerStart.length);
+  const end = afterStart.indexOf(markerEnd);
+  const raw = (end >= 0 ? afterStart.slice(0, end) : afterStart).trim();
+  return raw || null;
+}
+
+function deriveRefinementType(params: {
+  generationNumber: number;
+  additionalPrompt: string;
+  regenerateFromRoom: boolean | null;
+}): string {
+  if (params.generationNumber <= 1) return "Initial render";
+  const hasSave = params.additionalPrompt.includes("SAVE MONEY / LOWER-COST");
+  const hasDesign = params.additionalPrompt.includes("DESIGN UPGRADE");
+  const hasCustom = params.additionalPrompt.includes("HOMEOWNER CUSTOM TWEAK");
+  if (hasSave && hasDesign) return hasCustom ? "Save money + design + custom" : "Save money + design";
+  if (hasSave) return hasCustom ? "Save money + custom" : "Save money";
+  if (hasDesign) return hasCustom ? "Design upgrade + custom" : "Design upgrade";
+  if (hasCustom) return "Custom tweak";
+  if (params.regenerateFromRoom === false) return "Refine current preview";
+  return "Regenerate from original";
+}
 
 export type RenovisionAdminMockupRow = {
   mockupId: string;
@@ -263,6 +303,9 @@ async function countSignedInMockupsInRange(fromIso: string | null): Promise<numb
 export async function fetchRenovisionAdminOverview(range: RenovisionAdminRange): Promise<RenovisionAdminOverview> {
   const svc = createServiceClient();
   const fromIso = rangeLowerBoundIso(range);
+  const startToday = new Date();
+  startToday.setUTCHours(0, 0, 0, 0);
+  const startTodayIso = startToday.toISOString();
 
   const [
     anonSessions,
@@ -270,6 +313,7 @@ export async function fetchRenovisionAdminOverview(range: RenovisionAdminRange):
     signupsInRange,
     remodelerReq,
     converted,
+    homeViewsToday,
   ] = await Promise.all([
     countRows("renovision_anonymous_sessions", { fromIso }),
     countRows("profiles", { fromIso: null }),
@@ -284,6 +328,23 @@ export async function fetchRenovisionAdminOverview(range: RenovisionAdminRange):
       const { count, error } = await q;
       if (error) throw new Error(error.message);
       return count ?? 0;
+    })(),
+    (async () => {
+      const { data, error } = await svc
+        .from("renovision_analytics_events")
+        .select("anonymous_session_id, user_id")
+        .eq("event_type", "home_page_view")
+        .gte("occurred_at", startTodayIso)
+        .limit(20000);
+      if (error) throw new Error(error.message);
+      const unique = new Set<string>();
+      for (const row of data ?? []) {
+        const anonId = String((row as { anonymous_session_id?: unknown }).anonymous_session_id ?? "").trim();
+        const userId = String((row as { user_id?: unknown }).user_id ?? "").trim();
+        if (anonId) unique.add(`anon:${anonId}`);
+        else if (userId) unique.add(`user:${userId}`);
+      }
+      return unique.size;
     })(),
   ]);
 
@@ -330,6 +391,7 @@ export async function fetchRenovisionAdminOverview(range: RenovisionAdminRange):
   return {
     range,
     fromIso,
+    uniqueHomeVisitorsToday: homeViewsToday,
     totalAnonymousSessions: anonSessions,
     totalRegisteredUsers: profilesCount,
     totalSignupsInRange: signupsInRange,
@@ -654,16 +716,149 @@ export async function fetchRenovisionAdminProjectsTable(
   if (fromIso) q = q.gte("created_at", fromIso);
   const { data: projects, error } = await q;
   if (error) throw new Error(error.message);
+  const projectIds = (projects ?? []).map((p) => String(p.id));
 
-  const { data: mockRows } = await svc.from("homeowner_try_mockups").select("project_id, mockup_generation");
+  const { data: generationRows } = projectIds.length
+    ? await svc
+        .from("bathroom_generations")
+        .select("project_id, created_at, selected_style, user_description")
+        .in("project_id", projectIds)
+    : { data: [] };
+  const generationContextByProject = new Map<
+    string,
+    { createdAt: string; selectedStyle: string | null; userDescription: string | null }
+  >();
+  for (const g of generationRows ?? []) {
+    const projectId = String((g as { project_id?: unknown }).project_id ?? "").trim();
+    if (!projectId) continue;
+    const createdAt = String((g as { created_at?: unknown }).created_at ?? "");
+    const selectedStyle = String((g as { selected_style?: unknown }).selected_style ?? "").trim() || null;
+    const userDescription = String((g as { user_description?: unknown }).user_description ?? "").trim() || null;
+    const prev = generationContextByProject.get(projectId);
+    if (!prev || createdAt < prev.createdAt) {
+      generationContextByProject.set(projectId, { createdAt, selectedStyle, userDescription });
+    }
+  }
+
+  const { data: beforeGenerations } = projectIds.length
+    ? await svc
+        .from("bathroom_generations")
+        .select("project_id, created_at, uploaded_image_url")
+        .in("project_id", projectIds)
+    : { data: [] };
+  const originalBeforePathByProject = new Map<string, { createdAt: string; storagePath: string }>();
+  for (const g of beforeGenerations ?? []) {
+    const projectId = String((g as { project_id?: unknown }).project_id ?? "").trim();
+    const storagePath = String((g as { uploaded_image_url?: unknown }).uploaded_image_url ?? "").trim();
+    const createdAt = String((g as { created_at?: unknown }).created_at ?? "");
+    if (!projectId || !storagePath) continue;
+    const prev = originalBeforePathByProject.get(projectId);
+    // Keep the earliest uploaded image as the original "before" photo.
+    if (!prev || createdAt < prev.createdAt) {
+      originalBeforePathByProject.set(projectId, { createdAt, storagePath });
+    }
+  }
+
+  const { data: mockRows } = await svc
+    .from("homeowner_try_mockups")
+    .select("id, project_id, mockup_generation, storage_path, created_at, mockup_generation_meta");
   const mockAgg = new Map<string, { total: number; initial: number; regen: number }>();
+  const mockupsByProject = new Map<
+    string,
+    Array<{
+      mockupId: string;
+      createdAt: string;
+      generationNumber: number;
+      storagePath: string;
+      refinementType: string;
+      customPrompt: string | null;
+    }>
+  >();
   for (const m of mockRows ?? []) {
     const pid = String(m.project_id);
     const cur = mockAgg.get(pid) ?? { total: 0, initial: 0, regen: 0 };
     cur.total += 1;
-    if (Number(m.mockup_generation) === 1) cur.initial += 1;
-    else cur.regen += 1;
+    const generationNumber = Number(m.mockup_generation);
+    const createdAt = String((m as { created_at?: unknown }).created_at ?? "");
+    const storagePath = String((m as { storage_path?: unknown }).storage_path ?? "").trim();
+    const meta = (m as { mockup_generation_meta?: unknown }).mockup_generation_meta as
+      | { additionalPrompt?: unknown; regenerateFromRoom?: unknown }
+      | null
+      | undefined;
+    const additionalPrompt = String(meta?.additionalPrompt ?? "");
+    const regenerateFromRoom =
+      typeof meta?.regenerateFromRoom === "boolean" ? meta.regenerateFromRoom : null;
+    const customPrompt = extractCustomTweakFromAdditionalPrompt(additionalPrompt);
+    const refinementType = deriveRefinementType({
+      generationNumber,
+      additionalPrompt,
+      regenerateFromRoom,
+    });
+    if (generationNumber === 1) {
+      cur.initial += 1;
+    } else {
+      cur.regen += 1;
+    }
+    if (storagePath) {
+      const arr = mockupsByProject.get(pid) ?? [];
+      arr.push({
+        mockupId: String(m.id),
+        createdAt,
+        generationNumber,
+        storagePath,
+        refinementType,
+        customPrompt,
+      });
+      mockupsByProject.set(pid, arr);
+    }
     mockAgg.set(pid, cur);
+  }
+
+  for (const arr of mockupsByProject.values()) {
+    arr.sort((a, b) => {
+      if (a.generationNumber !== b.generationNumber) return a.generationNumber - b.generationNumber;
+      return a.createdAt < b.createdAt ? -1 : 1;
+    });
+  }
+
+  const signedUrlByPath = new Map<string, string>();
+  const pathsToSign = new Set<string>();
+  for (const arr of mockupsByProject.values()) {
+    for (const item of arr) {
+      pathsToSign.add(item.storagePath);
+    }
+  }
+  for (const before of originalBeforePathByProject.values()) {
+    pathsToSign.add(before.storagePath);
+  }
+  for (const path of pathsToSign) {
+    const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(path, 60 * 60);
+    if (signed.data?.signedUrl) signedUrlByPath.set(path, signed.data.signedUrl);
+  }
+
+  const previewImagesByProject = new Map<
+    string,
+    Array<{
+      mockupId: string;
+      createdAt: string;
+      generationNumber: number;
+      imageUrl: string;
+      refinementType: string;
+      customPrompt: string | null;
+    }>
+  >();
+  for (const [projectId, arr] of mockupsByProject.entries()) {
+    const previews = arr
+      .map((m) => ({
+        mockupId: m.mockupId,
+        createdAt: m.createdAt,
+        generationNumber: m.generationNumber,
+        imageUrl: signedUrlByPath.get(m.storagePath) ?? "",
+        refinementType: m.refinementType,
+        customPrompt: m.customPrompt,
+      }))
+      .filter((m) => Boolean(m.imageUrl));
+    previewImagesByProject.set(projectId, previews);
   }
 
   const { data: reqRows } = await svc.from("leads").select("generation_id");
@@ -686,9 +881,13 @@ export async function fetchRenovisionAdminProjectsTable(
       userId: (p.user_id as string | null) ?? null,
       anonymousSessionId: (p.anonymous_session_id as string | null) ?? null,
       convertedFromAnon: Boolean((p as { converted_from_anon_session_id?: string }).converted_from_anon_session_id),
+      selectedStyle: generationContextByProject.get(pid)?.selectedStyle ?? null,
+      originalUserPrompt: generationContextByProject.get(pid)?.userDescription ?? null,
       mockupCount: agg.total,
       initialCount: agg.initial,
       regenCount: agg.regen,
+      originalBeforeImageUrl: signedUrlByPath.get(originalBeforePathByProject.get(pid)?.storagePath ?? "") ?? null,
+      previewImages: previewImagesByProject.get(pid) ?? [],
       remodelerRequested: remodelerProjects.has(pid),
     };
   });

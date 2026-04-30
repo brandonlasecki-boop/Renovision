@@ -3,13 +3,13 @@
  * tail where scope, remodel instructions, and quote lines live — models then ignore the job.
  * Prefer keeping both the opening rules and the closing task text.
  */
-const DEFAULT_MARKER =
+export const MOCKUP_PROMPT_TRUNCATE_MARKER =
   "\n\n[... middle of prompt omitted for length — opening rules above; job scope / lines / remodel below ...]\n\n";
 
 export function truncateMockupTextPrompt(
   full: string,
   maxChars: number,
-  marker: string = DEFAULT_MARKER,
+  marker: string = MOCKUP_PROMPT_TRUNCATE_MARKER,
 ): string {
   if (full.length <= maxChars) return full;
   if (maxChars < 400) return full.slice(0, maxChars);
@@ -36,22 +36,49 @@ export const MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX = [
 ].join("\n");
 
 /**
- * Truncates long mockup prompts then appends {@link MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX} within `maxChars`.
+ * End-of-prompt reinforcement for `/try` **Update preview** runs: must NOT contradict the PRIORITY
+ * homeowner block at the top (the default suffix’s “wet box rigid” line often overwrote tweak intent).
+ */
+export const MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX_HOMEOWNER_TWEAK = [
+  "LAYOUT (HOMEOWNER TWEAK RUN — READ LAST, BUT MUST MATCH THE TOP OF THIS PROMPT):",
+  "The section at the BEGINNING labeled PRIORITY — HOMEOWNER TWEAKS lists the changes for THIS image. Implement those visible finish/fixture updates — they override generic preservation wording when they name a surface, fixture, or zone.",
+  "Keep the same camera angle and overall room footprint as the input image (no widening, no reframing). Wet-zone glass/enclosure may change only when those tweak bullets or wet-zone wording explicitly describe it.",
+  "Do not substitute a whole-room restyle or unrelated upgrades for the numbered bullets.",
+  "Product JPEG references (if present): match materials/finishes to their labeled quote zones only.",
+].join("\n");
+
+export type TruncateMockupLayoutOpts = {
+  /** `/try` tweak from an existing mockup — use {@link MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX_HOMEOWNER_TWEAK}. */
+  homeownerMockupTweak?: boolean;
+  /**
+   * Inserted after the truncated body and **before** {@link MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX}.
+   * Used when long prompts would drop a critical middle section (e.g. luxury OpenAI vision-built prompt).
+   */
+  preLayoutReinforcementBlock?: string;
+};
+
+/**
+ * Truncates long mockup prompts then appends a layout reinforcement suffix within `maxChars`.
  */
 export function truncateMockupTextPromptWithLayoutReinforcement(
   full: string,
   maxChars: number,
-  marker: string = DEFAULT_MARKER,
+  marker: string = MOCKUP_PROMPT_TRUNCATE_MARKER,
+  opts?: TruncateMockupLayoutOpts,
 ): string {
-  const suffix = MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX;
+  const suffix = opts?.homeownerMockupTweak
+    ? MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX_HOMEOWNER_TWEAK
+    : MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX;
   const sep = "\n\n";
+  const preRaw = opts?.preLayoutReinforcementBlock?.trim() ?? "";
+  const preBlock = preRaw ? `${sep}${preRaw}` : "";
   const suffixBlock = `${sep}${suffix}`;
-  const suffixLen = suffixBlock.length;
-  const innerMax = maxChars - suffixLen;
+  const reservedLen = preBlock.length + suffixBlock.length;
+  const innerMax = maxChars - reservedLen;
   // Prefer full reinforcement; if the budget cannot fit it, fall back to plain truncation.
   if (innerMax < 80) {
     return truncateMockupTextPrompt(full, maxChars, marker);
   }
   const body = truncateMockupTextPrompt(full, innerMax, marker);
-  return `${body}${suffixBlock}`;
+  return `${body}${preBlock}${suffixBlock}`;
 }

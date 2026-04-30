@@ -2,13 +2,15 @@
  * Primary creative brief for /try **Spa Retreat** mockups (Vertex: Gemini 3.1 Flash Image / “Nano Banana 2”).
  * Kept in one module so the same text drives `buildGenerationPrompt` and the Vertex-only image prompt.
  */
+import { buildWetZoneVertexOverrideBanner } from "@/lib/homeowner-try/wet-zone-intent";
+
 export const SPA_RETREAT_MOCKUP_USER_PROMPT = `You are editing a real bathroom photo.
 
 Your goal is to create a realistic, buildable, SPA-STYLE remodel — NOT redesign the space.
 
 ---
 
-🔒 PRESERVE STRUCTURE (NON-NEGOTIABLE)
+PRESERVE STRUCTURE (NON-NEGOTIABLE)
 
 Keep the EXACT:
 - layout and floor plan
@@ -22,7 +24,7 @@ Do NOT:
 
 ---
 
-🚨 GEOMETRY LOCK (CRITICAL — HIGHEST PRIORITY)
+GEOMETRY LOCK (CRITICAL — HIGHEST PRIORITY)
 
 You must preserve the EXACT geometry of the original image.
 
@@ -39,7 +41,7 @@ This rule overrides ALL styling instructions.
 
 ---
 
-🚽 FIXTURE RULES
+FIXTURE RULES
 
 The bathroom contains:
 - one toilet
@@ -52,11 +54,11 @@ You MUST:
 - NOT move plumbing locations
 
 If any fixture is partially hidden:
-→ it must remain partially hidden in the SAME way
+-> it must remain partially hidden in the SAME way
 
 ---
 
-🚿 SHOWER + SPACING LOCK
+SHOWER + SPACING LOCK
 
 - The shower opening width must match the original EXACTLY
 - Glass panels must NOT extend beyond the original footprint
@@ -71,7 +73,7 @@ No element may be moved, widened, or resized.
 
 ---
 
-📏 REALISM RULES
+REALISM RULES
 
 - Do NOT enlarge or upscale fixtures
 - Everything must fit within the same physical dimensions
@@ -79,7 +81,7 @@ No element may be moved, widened, or resized.
 
 ---
 
-🔥 REQUIRED TRANSFORMATION
+REQUIRED TRANSFORMATION
 
 You MUST upgrade the bathroom noticeably while keeping structure unchanged.
 
@@ -95,7 +97,7 @@ Do NOT make subtle changes — the upgrade should be clearly visible.
 
 ---
 
-🌿 STYLE: SPA RETREAT (CALM + NATURAL)
+STYLE: SPA RETREAT (CALM + NATURAL)
 
 Apply a spa-inspired design using:
 
@@ -122,7 +124,7 @@ Avoid:
 
 ---
 
-🎯 FINAL GOAL
+FINAL GOAL
 
 The final image must:
 - look like the SAME bathroom
@@ -154,11 +156,15 @@ export function buildVertexSpaRetreatTryImageEditPrompt(opts: {
   quoteLineContext: string;
   /** OpenAI “remodel edit” paragraph(s) — secondary context only. */
   remodelEditFromVision: string;
+  /** When true, prepend override so style “shower width locked” does not block tub→shower. */
+  wetZoneRemodelIntent?: boolean;
 }): string {
   const tail = additionalPromptAfterSpaRetreatBase(opts.additionalPrompt);
-  const blocks: string[] = [
-    SPA_RETREAT_MOCKUP_USER_PROMPT,
-  ];
+  const blocks: string[] = [];
+  if (opts.wetZoneRemodelIntent) {
+    blocks.push(buildWetZoneVertexOverrideBanner());
+  }
+  blocks.push(SPA_RETREAT_MOCKUP_USER_PROMPT);
   const scope = opts.scopeDescription.trim();
   if (scope) {
     blocks.push(
@@ -176,11 +182,17 @@ export function buildVertexSpaRetreatTryImageEditPrompt(opts: {
   const visionRemodel = opts.remodelEditFromVision.trim();
   if (visionRemodel) {
     blocks.push(
-      `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
+      opts.wetZoneRemodelIntent
+        ? `OpenAI remodel notes (wet-zone changes allowed — homeowner + notes win for tub/shower):\n${visionRemodel.slice(0, 2000)}`
+        : `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
     );
   }
   if (tail) {
-    blocks.push(`This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 8000)}`);
+    blocks.push(
+      opts.wetZoneRemodelIntent
+        ? `This run (homeowner — apply tub/shower changes exactly as written):\n${tail.slice(0, 12000)}`
+        : `This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 12000)}`,
+    );
   }
   return blocks.join("\n\n");
 }

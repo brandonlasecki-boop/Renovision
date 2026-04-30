@@ -7,6 +7,7 @@ import {
 } from "@/lib/actions/homeowner-try";
 import { signOut } from "@/lib/actions/auth";
 import { HomeownerTryClient } from "@/components/homeowner/homeowner-try-client";
+import { StartNewTryLink } from "@/components/homeowner/start-new-try-link";
 import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
 import { createClient } from "@/lib/supabase/server";
 import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
@@ -28,6 +29,7 @@ export default async function RenovisionTryPage({
     restore_project_id?: string;
     auto_save_project?: string;
     new?: string;
+    r?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -123,9 +125,7 @@ export default async function RenovisionTryPage({
                 <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
                   My Projects
                 </Link>
-                <Link href="/try?new=1" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
-                  Start New
-                </Link>
+                <StartNewTryLink />
               </>
             ) : null}
             <Link
@@ -162,6 +162,8 @@ export default async function RenovisionTryPage({
         restoredGeneration={restoredGeneration}
         autoSavedProject={autoSavedProject}
         startNewProject={forceNew}
+        startNewToken={sp.r ?? ""}
+        viewerIsAdmin={showAdminNav}
       />
     </div>
   );

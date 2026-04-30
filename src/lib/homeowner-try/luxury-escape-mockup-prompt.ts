@@ -1,13 +1,15 @@
 /**
  * Primary creative brief for /try **Luxury Escape** mockups (Vertex: Gemini image edit — same packaging as Spa / Bold Modern).
  */
+import { buildWetZoneVertexOverrideBanner } from "@/lib/homeowner-try/wet-zone-intent";
+
 export const LUXURY_ESCAPE_MOCKUP_USER_PROMPT = `You are editing a real bathroom photo.
 
 Your goal is to create a realistic, buildable, HIGH-END LUXURY remodel — NOT redesign the space.
 
 ---
 
-🔒 PRESERVE STRUCTURE (NON-NEGOTIABLE)
+PRESERVE STRUCTURE (NON-NEGOTIABLE)
 
 Keep the EXACT:
 - layout and floor plan
@@ -22,7 +24,7 @@ Do NOT:
 
 ---
 
-🚽 FIXTURE RULES
+FIXTURE RULES
 
 The bathroom contains:
 - one toilet
@@ -35,11 +37,11 @@ You MUST:
 - NOT move plumbing locations
 
 If any fixture is partially hidden:
-→ it must remain partially hidden in the SAME way
+-> it must remain partially hidden in the SAME way
 
 ---
 
-🚿 SHOWER RULE (CRITICAL)
+SHOWER RULE (CRITICAL)
 
 - The shower opening width must match the original EXACTLY
 - Do NOT widen the shower
@@ -48,7 +50,7 @@ If any fixture is partially hidden:
 
 ---
 
-📏 REALISM RULES
+REALISM RULES
 
 - Do NOT enlarge or upscale fixtures
 - Everything must fit within the same physical dimensions
@@ -56,7 +58,7 @@ If any fixture is partially hidden:
 
 ---
 
-🔥 REQUIRED TRANSFORMATION (FORCE THIS)
+REQUIRED TRANSFORMATION (FORCE THIS)
 
 You MUST significantly upgrade the bathroom.
 
@@ -80,7 +82,7 @@ The transformation must be clearly visible and dramatic.
 
 ---
 
-💎 STYLE: HIGH-END LUXURY (HOTEL STYLE — STRONG)
+STYLE: HIGH-END LUXURY (HOTEL STYLE — STRONG)
 
 Apply a luxury design with:
 
@@ -102,7 +104,7 @@ This should feel like a high-end hotel bathroom.
 
 ---
 
-🎯 FINAL GOAL
+FINAL GOAL
 
 The final image must:
 - look like the SAME bathroom
@@ -111,6 +113,18 @@ The final image must:
 - be realistic and buildable
 
 This is a remodel, NOT a redesign.`;
+
+/**
+ * Appended only to **OpenAI** image-edit prompts for `luxury_escape` in `/try` (`run-mockup-generation`).
+ * Vertex luxury prompts intentionally omit this block until product wants parity.
+ */
+export const LUXURY_ESCAPE_OPENAI_MIRROR_REFLECTION_ANALYSIS = `MIRROR AND REFLECTION ANALYSIS (OPENAI IMAGE EDIT ONLY):
+Study the photo for mirrors, medicine cabinets, shower glass, and any reflective surface before editing.
+- Treat reflections as reflections: a fixture or wall shown *in a mirror* is not a second copy of the room and must not become an extra toilet, tub, shower, or vanity in the remodel.
+- Anchor the **true layout** to direct sightlines—walls, floor, curb lines, and fixture bodies you see without relying on mirror duplicates.
+- If a tub, shower, or enclosure appears mainly in a mirror, it still exists in the real room: keep it in the same footprint and opening width as the source photo’s geometry (same wet zone, same camera-facing structure).
+- Do not widen the room, add openings, or relocate plumbing because a reflection made the space look larger or duplicated.
+- Windows and doors: use real jambs and glass in the walls of the room; ignore mirrored copies as layout cues.`;
 
 export function additionalPromptAfterLuxuryEscapeBase(fullAdditionalPrompt: string): string {
   const base = LUXURY_ESCAPE_MOCKUP_USER_PROMPT;
@@ -127,9 +141,14 @@ export function buildVertexLuxuryEscapeTryImageEditPrompt(opts: {
   additionalPrompt: string;
   quoteLineContext: string;
   remodelEditFromVision: string;
+  wetZoneRemodelIntent?: boolean;
 }): string {
   const tail = additionalPromptAfterLuxuryEscapeBase(opts.additionalPrompt);
-  const blocks: string[] = [LUXURY_ESCAPE_MOCKUP_USER_PROMPT];
+  const blocks: string[] = [];
+  if (opts.wetZoneRemodelIntent) {
+    blocks.push(buildWetZoneVertexOverrideBanner());
+  }
+  blocks.push(LUXURY_ESCAPE_MOCKUP_USER_PROMPT);
   const scope = opts.scopeDescription.trim();
   if (scope) {
     blocks.push(
@@ -147,11 +166,17 @@ export function buildVertexLuxuryEscapeTryImageEditPrompt(opts: {
   const visionRemodel = opts.remodelEditFromVision.trim();
   if (visionRemodel) {
     blocks.push(
-      `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
+      opts.wetZoneRemodelIntent
+        ? `OpenAI remodel notes (wet-zone changes allowed — homeowner + notes win for tub/shower):\n${visionRemodel.slice(0, 2000)}`
+        : `OpenAI remodel notes (context only — do not override geometry locks above):\n${visionRemodel.slice(0, 2000)}`,
     );
   }
   if (tail) {
-    blocks.push(`This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 8000)}`);
+    blocks.push(
+      opts.wetZoneRemodelIntent
+        ? `This run (homeowner — apply tub/shower changes exactly as written):\n${tail.slice(0, 12000)}`
+        : `This run (homeowner notes, UI tweaks, or rescue text):\n${tail.slice(0, 12000)}`,
+    );
   }
   return blocks.join("\n\n");
 }

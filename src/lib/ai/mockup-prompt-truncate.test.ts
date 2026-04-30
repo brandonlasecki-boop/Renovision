@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX,
+  MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX_HOMEOWNER_TWEAK,
   truncateMockupTextPrompt,
   truncateMockupTextPromptWithLayoutReinforcement,
 } from "./mockup-prompt-truncate";
@@ -43,5 +44,25 @@ describe("truncateMockupTextPromptWithLayoutReinforcement", () => {
     expect(out.startsWith(full)).toBe(true);
     expect(out).toContain(MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX);
     expect(out.length).toBeLessThanOrEqual(maxChars);
+  });
+
+  it("uses homeowner tweak reinforcement suffix when opts.homeownerMockupTweak", () => {
+    const full = "short prompt";
+    const out = truncateMockupTextPromptWithLayoutReinforcement(full, 20_000, undefined, {
+      homeownerMockupTweak: true,
+    });
+    expect(out.endsWith(MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX_HOMEOWNER_TWEAK)).toBe(true);
+    expect(out).toContain("PRIORITY — HOMEOWNER TWEAKS");
+  });
+
+  it("inserts preLayoutReinforcementBlock before the standard suffix", () => {
+    const full = "short prompt";
+    const pin = "PINNED GEOMETRY BLOCK";
+    const out = truncateMockupTextPromptWithLayoutReinforcement(full, 20_000, undefined, {
+      preLayoutReinforcementBlock: pin,
+    });
+    expect(out).toContain(pin);
+    expect(out.indexOf(pin)).toBeLessThan(out.indexOf("LAYOUT REINFORCEMENT"));
+    expect(out.endsWith(MOCKUP_LAYOUT_REINFORCEMENT_SUFFIX)).toBe(true);
   });
 });

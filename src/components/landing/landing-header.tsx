@@ -82,7 +82,7 @@ export async function LandingHeader() {
               </Link>
             )}
             <Link href="/try" className={cn(buttonVariants({ size: "sm" }))}>
-              Start Free
+              Try My Bathroom
             </Link>
           </div>
         </div>

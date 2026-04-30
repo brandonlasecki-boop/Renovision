@@ -25,6 +25,7 @@ import {
 import {
   getBathroomStyleById,
   resolveBathroomStyleIdFromGeneration,
+  type BathroomStyleConfig,
   type BathroomStyleId,
 } from "@/lib/homeowner-try/bathroom-styles";
 import {
@@ -38,6 +39,9 @@ import { CLEAN_REFRESH_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/clean-refr
 import { LUXURY_ESCAPE_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/luxury-escape-mockup-prompt";
 import { SPA_RETREAT_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/spa-retreat-mockup-prompt";
 import { WARM_MINIMALIST_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/warm-minimalist-mockup-prompt";
+import { COASTAL_BEACH_HOUSE_MOCKUP_USER_PROMPT } from "@/lib/homeowner-try/coastal-beach-house-mockup-prompt";
+import { buildWetZoneRemodelPromptBlock, detectWetZoneRemodelIntent } from "@/lib/homeowner-try/wet-zone-intent";
+import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type HomeownerTryPageState =
@@ -137,13 +141,188 @@ function buildGenerationPrompt(styleId: BathroomStyleId, userText?: string): str
     if (userText?.trim()) parts.push(userText.trim());
     return parts.join("\n\n");
   }
+  if (styleId === "coastal_beach_house") {
+    const parts = [COASTAL_BEACH_HOUSE_MOCKUP_USER_PROMPT];
+    if (userText?.trim()) parts.push(userText.trim());
+    return parts.join("\n\n");
+  }
   const parts = [BATHROOM_MASTER_PROMPT];
   if (userText?.trim()) parts.push(userText.trim());
   return parts.join("\n\n");
 }
 
+/** Prepends wet-zone directive when user vision mentions walk-in shower / tub conversion (initial `/try` upload). */
+function buildInitialTryGenerationPrompt(
+  styleId: BathroomStyleId,
+  userText?: string,
+): { prompt: string; wetZoneRemodelIntent: boolean } {
+  const base = buildGenerationPrompt(styleId, userText);
+  const wet = detectWetZoneRemodelIntent(userText ?? "");
+  if (!wet) return { prompt: base, wetZoneRemodelIntent: false };
+  return {
+    prompt: `${buildWetZoneRemodelPromptBlock()}\n\n${base}`.slice(0, 6000),
+    wetZoneRemodelIntent: true,
+  };
+}
+
 const TRY_SUGGESTIONS_PER_CATEGORY = 4;
 const HOMEOWNER_CUSTOM_TWEAK_MAX_CHARS = 1200;
+/** Room for surgical scope + custom text + style baseline; server run pipeline also caps raw prompt length. */
+const HOMEOWNER_TWEAK_PROMPT_MAX_CHARS = 9000;
+
+function composeTweakFirstPrompt(basePrompt: string, tweakBlocks: string[]): string {
+  const blocks = tweakBlocks.map((b) => b.trim()).filter(Boolean);
+  if (blocks.length === 0) return basePrompt.slice(0, HOMEOWNER_TWEAK_PROMPT_MAX_CHARS);
+  return `${blocks.join("\n\n")}\n\nSTYLE BASELINE (apply after the tweak instructions above):\n${basePrompt}`.slice(
+    0,
+    HOMEOWNER_TWEAK_PROMPT_MAX_CHARS,
+  );
+}
+
+function parseRequestedPercent(text: string): number | null {
+  const m = text.match(/(\d{1,2})\s*%/);
+  if (!m?.[1]) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(10, Math.min(40, Math.round(n)));
+}
+
+type FixtureScaleDirective = {
+  fixture: string;
+  direction: "increase" | "decrease";
+  percent: number;
+};
+
+type FixtureTarget = "tub" | "shower" | "vanity" | "mirror" | "toilet" | "lighting" | "tile";
+
+function extractFixtureScaleDirectives(text: string): FixtureScaleDirective[] {
+  const t = text.toLowerCase();
+  const wantsIncrease =
+    t.includes("bigger") ||
+    t.includes("larger") ||
+    t.includes("wider") ||
+    t.includes("widen") ||
+    t.includes("expand") ||
+    t.includes("increase") ||
+    t.includes("more ");
+  const wantsDecrease =
+    t.includes("smaller") ||
+    t.includes("narrower") ||
+    t.includes("shrink") ||
+    t.includes("reduce") ||
+    t.includes("less ");
+  if (!wantsIncrease && !wantsDecrease) return [];
+  const direction: "increase" | "decrease" =
+    wantsIncrease && !wantsDecrease ? "increase" : wantsDecrease && !wantsIncrease ? "decrease" : "increase";
+  const defaultPct = direction === "increase" ? 25 : 20;
+  const pct = parseRequestedPercent(t) ?? defaultPct;
+
+  const fixtureAliases: Array<{ fixture: string; aliases: string[] }> = [
+    { fixture: "vanity", aliases: ["vanity", "cabinet", "countertop", "sink cabinet"] },
+    { fixture: "mirror", aliases: ["mirror", "medicine cabinet"] },
+    { fixture: "shower glass", aliases: ["shower glass", "glass panel", "shower door"] },
+  ];
+
+  const out: FixtureScaleDirective[] = [];
+  for (const f of fixtureAliases) {
+    if (f.aliases.some((a) => t.includes(a))) {
+      out.push({ fixture: f.fixture, direction, percent: pct });
+    }
+  }
+  return out;
+}
+
+function applyFixtureScaleDirectivesIfNeeded(basePrompt: string, allTweakText: string[]): string {
+  const joined = allTweakText.join("\n").trim();
+  if (!joined) return basePrompt;
+  const directives = extractFixtureScaleDirectives(joined);
+  if (directives.length === 0) return basePrompt;
+  const lines = directives.map((d) =>
+    d.direction === "increase"
+      ? `- Increase ${d.fixture} size by approximately ${d.percent}% in place (same wall/zone).`
+      : `- Decrease ${d.fixture} size by approximately ${d.percent}% in place (same wall/zone).`,
+  );
+  return composeTweakFirstPrompt(basePrompt, [
+    `FIXTURE SCALE OVERRIDES (MANDATORY FOR THIS RUN):
+${lines.join("\n")}
+- Keep room geometry/camera fixed; do not zoom out or reframe.
+- Preserve ROOM SIZE MATCH vs the source: same apparent wall spans, door/opening widths in frame, and floor visible — do not make the room feel larger or smaller than the before photo.
+- Scale changes apply only to the named fixture locally; do not stretch tile fields, walls, or perspective to “make space.”
+- If a target fixture is partially edge-cropped, keep crop context while still applying the size change.
+- Reject no-op outcome: if requested fixture size is visually unchanged, the result is invalid for this run.`,
+  ]);
+}
+
+function extractCustomPromptTargets(text: string): FixtureTarget[] {
+  const t = text.toLowerCase();
+  const out: FixtureTarget[] = [];
+  const push = (k: FixtureTarget) => {
+    if (!out.includes(k)) out.push(k);
+  };
+  if (t.includes("tub") || t.includes("bathtub")) push("tub");
+  if (t.includes("shower") || t.includes("glass")) push("shower");
+  if (t.includes("vanity") || t.includes("cabinet") || t.includes("counter")) push("vanity");
+  if (t.includes("mirror") || t.includes("medicine cabinet")) push("mirror");
+  if (t.includes("toilet")) push("toilet");
+  if (t.includes("light") || t.includes("sconce") || t.includes("pendant")) push("lighting");
+  if (t.includes("tile") || t.includes("grout") || t.includes("floor")) push("tile");
+  return out;
+}
+
+function applyCustomPromptHardRequirements(basePrompt: string, customTweakRaw: string): string {
+  const custom = customTweakRaw.trim();
+  if (!custom) return basePrompt;
+  const targets = extractCustomPromptTargets(custom);
+  const wetZone = detectWetZoneRemodelIntent(custom);
+  const targetLine =
+    targets.length > 0
+      ? `- Required visible changes must involve: ${targets.join(", ")}.`
+      : "- Required visible changes must directly reflect the homeowner custom text.";
+  const geometryLine = wetZone
+    ? "- Keep the same bathroom outer shell, camera, and perceived room size; tub/shower enclosure, glass, and curb may change within the existing wet footprint to match the custom text."
+    : "- Keep room geometry/framing fixed while applying the custom change in place.";
+  return composeTweakFirstPrompt(basePrompt, [
+    `CUSTOM PROMPT EXECUTION (HIGHEST PRIORITY):
+- The custom text below is mandatory for this run and must produce at least one clearly visible change.
+${targetLine}
+- Limit edits to what the custom text describes; do not restyle unrelated fixtures, walls, or finishes.
+- Do not treat the custom text as optional styling; output is invalid if it looks unchanged versus the source.
+${geometryLine}
+CUSTOM TEXT:
+${custom}`,
+  ]);
+}
+
+/** Lists exactly what this tweak run may change; everything else must stay as the baseline mockup. */
+function buildSurgicalTweakScopeBlock(params: {
+  saveHintSelections: string[];
+  designHintSelections: string[];
+  legacyHint: string;
+  customTweakRaw: string;
+}): string {
+  const lines: string[] = [];
+  for (const h of params.saveHintSelections) {
+    lines.push(`[Lower cost] ${h}`);
+  }
+  for (const h of params.designHintSelections) {
+    lines.push(`[Design upgrade] ${h}`);
+  }
+  const legacy = params.legacyHint.trim();
+  if (legacy) lines.push(`[Hint] ${legacy}`);
+  const custom = params.customTweakRaw.trim();
+  if (custom) lines.push(`[Custom] ${custom.slice(0, 900)}`);
+  if (lines.length === 0) return "";
+  const enumerated = lines.map((l, i) => `${i + 1}. ${l}`).join("\n");
+  return [
+    "SURGICAL SCOPE (THIS RUN ONLY) — AUTHORIZED CHANGES:",
+    "You may ONLY modify what is necessary to implement the numbered items below.",
+    "Do NOT change unrelated tiles, paint, fixtures, lighting, or decor outside what those items imply.",
+    "Keep all other areas of the baseline image materially unchanged (same finishes, same colors, same fixtures where not listed).",
+    "Do NOT apply a whole-room restyle, broad palette shift, or style refresh beyond these items.",
+    "Authorized items:",
+    enumerated,
+  ].join("\n");
+}
 
 /** One tweak line plus an approximate shift to total job cost (vs the estimate you output for this AFTER). */
 export type TryTweakSuggestion = {
@@ -153,10 +332,17 @@ export type TryTweakSuggestion = {
   deltaMax: number;
 };
 
-/** Wraps free-text homeowner tweaks so the image model treats them as finish-only deltas on the baseline. */
+/** Wraps free-text homeowner tweaks so the image model treats them as finish-only deltas on the baseline (or wet-zone remodel when detected). */
 function appendHomeownerCustomTweakBlock(basePrompt: string, customTrimmed: string): string {
   if (!customTrimmed) return basePrompt;
-  return `${basePrompt}\n\nHOMEOWNER CUSTOM TWEAK (apply only compatible parts on top of everything above):\n${customTrimmed}\n\nINTERPRETATION RULES FOR THE CUSTOM TEXT:\n- Treat it as **finishes and styling only** on the existing mockup: materials, colors, fixture *styles*, lighting warmth, mirror/medicine cabinet *look*, hardware, accessories, grout, paint, tile pattern/texture where it does not change wet-area or vanity footprints.\n- **Do not** use it to move/remove walls, doors, or windows; change room width; relocate toilet, tub/shower, vanity, or drains; add/remove fixtures; widen the shower; or crop/reframe to hide fixtures.\n- If any phrase implies layout, structural work, or plumbing moves, **ignore that phrase** and apply only the remainder that stays within finish-level edits on the current scene.`;
+  const wet = detectWetZoneRemodelIntent(customTrimmed);
+  const finishOnlyRules =
+    "- Apply custom requests as literally as possible while preserving the same room geometry/camera and the same **perceived room size** as the before photo (wall spans, floor area, door openings in frame must match the source scale).\n- Allowed custom changes include: finishes/styling plus **local fixture scale adjustments** (example: wider vanity run, larger mirror) without changing how large the room reads.\n- For vanity-size requests: adjust the vanity/counter along its existing wall only; do not widen the room or change tile/wall scale to fake extra space.\n- **Do not** move/remove walls, doors, or windows; change room width; relocate toilet, tub/shower, vanity wall position, or drains; add/remove fixture count; widen the shower footprint; or crop/reframe to hide fixtures.\n- If any phrase implies structural/layout/plumbing relocation, ignore only that incompatible part and still apply all compatible parts visibly.";
+  const wetZoneRules =
+    "- This text requests a **wet-zone remodel visualization** (tub/shower area). Show a **clear visible change** in the wet zone vs the baseline — no-op is invalid.\n- Keep the same bathroom outer shell, same camera, same perceived room size; wet-zone enclosure, curb, glass, and opening **may** change within the existing wet footprint.\n- Do **not** move exterior walls, windows, or room-scale geometry; do **not** relocate toilet or vanity unless the custom text explicitly asks.\n- Do **not** crop or reframe to hide fixtures.";
+  return composeTweakFirstPrompt(basePrompt, [
+    `HOMEOWNER CUSTOM TWEAK (apply only compatible parts on top of everything above):\n${customTrimmed}\n\nINTERPRETATION RULES FOR THE CUSTOM TEXT:\n${wet ? wetZoneRules : finishOnlyRules}`,
+  ]);
 }
 
 /** Optional hint from UI (legacy single-line hint). */
@@ -174,7 +360,7 @@ function buildRegenerateAdditionalPrompt(
       : kind === "improve_design"
         ? `DESIGN UPGRADE DIRECTION — apply this while keeping identical room geometry and fixture positions (finishes, palette, lighting character, decor level; do not widen the room or move walls):\n${trimmed}`
         : `REMODEL TWEAK (same geometry):\n${trimmed}`;
-  return `${base}\n\n${focus}`;
+  return composeTweakFirstPrompt(base, [focus]);
 }
 
 /** Multi-select tweak: apply every selected bullet together (same geometry). */
@@ -185,6 +371,7 @@ function buildMultiSuggestionPrompt(
 ): string {
   const base = buildGenerationPrompt(styleId);
   const blocks: string[] = [];
+  const selectedHints = [...saveHints, ...designHints].map((h) => h.trim()).filter(Boolean);
   if (saveHints.length > 0) {
     const body = saveHints.map((h, i) => `${i + 1}. ${h.trim()}`).join("\n");
     blocks.push(
@@ -198,22 +385,58 @@ function buildMultiSuggestionPrompt(
     );
   }
   if (blocks.length === 0) return base;
-  return `${base}\n\n${blocks.join("\n\n")}`.slice(0, 12_000);
+  blocks.unshift(
+    "MANDATORY EXECUTION: visibly apply each selected tweak on this run. If two selected tweaks conflict, keep layout fixed and apply the closest finish-level version of both.",
+  );
+  if (selectedHints.length > 0) {
+    blocks.unshift(
+      `NO-OP IS FORBIDDEN: output must be visually different from the source mockup in ways that clearly reflect these selected tweaks:\n${selectedHints.map((h, i) => `${i + 1}. ${h}`).join("\n")}`,
+    );
+  }
+  blocks.push(
+    "CHECKLIST: After rendering, a reviewer must be able to point to visible evidence of each selected bullet (color, fixture style, material, or lighting change) versus the baseline mockup.",
+  );
+  return composeTweakFirstPrompt(base, blocks);
 }
 
 /** Appended when editing from an existing mockup or applying a tweak hint — limits drift. */
-const TWEAK_EDIT_GUARDRAILS = [
-  "TWEAK / ITERATION MODE (HIGHEST PRIORITY FOR THIS RUN):",
-  "Use the provided baseline image as the layout truth: same camera angle, same room footprint, same corners and openings.",
-  "Apply only incremental finish and styling changes needed to satisfy the instruction — not a full re-imagination of the room.",
-  "Do NOT move, remove, or add walls, doors, windows, niches, or pony walls. Do NOT change shower opening width or glass footprint.",
-  "Do NOT change fixture count or plumbing locations. Keep toilet, sink, and wet area in the same positions and visibility as the baseline.",
-  "Do NOT widen the room, change perspective, or crop to hide fixtures. If unsure, change nothing about geometry.",
-].join("\n\n");
+function buildTweakEditGuardrails(wetZoneRemodelIntent: boolean): string {
+  const outerShell =
+    "Do NOT move, remove, or add exterior bathroom walls, doors, windows, niches, or pony walls.";
+  const showerLock =
+    "Do NOT change shower opening width or glass footprint unless this run explicitly requests a wet-zone remodel (walk-in / curbless / tub-to-shower); those requests override shower-enclosure locks inside the wet footprint only.";
+  const wetZoneException = [
+    outerShell,
+    "WET-ZONE EXCEPTION (THIS RUN): Tub/shower enclosure, curb, glass layout, and walk-in opening MAY change within the existing wet footprint to satisfy the homeowner wet-zone request.",
+    "Keep toilet, vanity, and dry areas unchanged unless the authorized bullet/custom text explicitly mentions them.",
+  ].join("\n\n");
 
-function appendTweakGuardrailsIfNeeded(prompt: string, opts: { tweakMode: boolean }): string {
+  const normalShowerLock = [outerShell, showerLock].join("\n\n");
+
+  const base = [
+    "TWEAK / ITERATION MODE (HIGHEST PRIORITY FOR THIS RUN):",
+    "The homeowner chose specific bullets and/or typed custom directions — those requests must appear in the output image, not be averaged away by generic preservation rules.",
+    "Use the provided baseline image as the layout truth: same camera angle, same room footprint, same corners and openings.",
+    wetZoneRemodelIntent
+      ? "Apply the homeowner-requested changes — including wet-zone remodel visualization when requested — without re-imagining unrelated areas."
+      : "Apply only incremental finish and styling changes needed to satisfy the instruction — not a full re-imagination of the room.",
+    "SURGICAL EDITS ONLY: Change only what this run explicitly asks for (listed bullets and/or custom text). Leave every unrelated surface, fixture, and finish matching the baseline mockup unless a tiny blend at an edited edge is unavoidable.",
+    "Do NOT run a whole-room restyle, palette swap, or unrelated upgrade.",
+    wetZoneRemodelIntent ? wetZoneException : normalShowerLock,
+    wetZoneRemodelIntent
+      ? "Keep toilet location and visibility consistent unless the prompt asks to change it. Vanity/dry zones stay as baseline unless explicitly authorized."
+      : "Do NOT change fixture count or plumbing locations. Keep toilet, sink, and wet area in the same positions and visibility as the baseline.",
+    "Do NOT widen the room, change perspective, or crop to hide fixtures. If unsure, change nothing about geometry.",
+  ];
+  return base.join("\n\n");
+}
+
+function appendTweakGuardrailsIfNeeded(
+  prompt: string,
+  opts: { tweakMode: boolean; wetZoneRemodelIntent?: boolean },
+): string {
   if (!opts.tweakMode) return prompt;
-  return `${prompt}\n\n${TWEAK_EDIT_GUARDRAILS}`;
+  return `${prompt}\n\n${buildTweakEditGuardrails(Boolean(opts.wetZoneRemodelIntent))}`;
 }
 
 export type SignedTryMockupVersion = {
@@ -221,6 +444,7 @@ export type SignedTryMockupVersion = {
   label: string;
   imageUrl: string;
   storagePath: string;
+  caption?: string | null;
 };
 
 async function loadSignedMockupVersionsForProject(
@@ -240,6 +464,7 @@ async function loadSignedMockupVersionsForProject(
       label: `v${i + 1}`,
       imageUrl: signed.data.signedUrl,
       storagePath: row.storage_path,
+      caption: row.caption,
     });
   }
   return out;
@@ -361,6 +586,116 @@ function normalizeTryTweakSuggestions(
     });
   }
   return out;
+}
+
+function suggestionAppearsToBeLayoutOrUpsizeDrift(text: string): boolean {
+  const t = normalizeSuggestionTextForCompare(text);
+  if (!t) return false;
+  // Common hallucinations: asking to enlarge dominant fixtures or change spatial layout.
+  const upsizeFixture =
+    /(bigger|larger|enlarge|expand|wider|increase size|upsize|oversized|full width|wall to wall).{0,30}(mirror|vanity|shower|toilet|window|door)/.test(
+      t,
+    ) ||
+    /(mirror|vanity|shower|toilet|window|door).{0,30}(bigger|larger|enlarge|expand|wider|increase size|upsize|oversized|full width|wall to wall)/.test(
+      t,
+    );
+  const layoutMove =
+    /(move|relocate|reposition|shift|open up|open the room|widen the room|reframe|zoom out|change layout|change floor plan|increase spacing)/.test(
+      t,
+    );
+  return upsizeFixture || layoutMove;
+}
+
+function suggestionAppearsPhysicallyInfeasibleForVisibleScene(text: string): boolean {
+  const t = normalizeSuggestionTextForCompare(text);
+  if (!t) return false;
+  // Common impossible recommendation when mirror already occupies the vanity wall.
+  const blockedVanityWallAddOn =
+    /(add|install|introduce|create|put).{0,24}(backsplash|accent wall|feature wall|wall panel|wallpaper)/.test(
+      t,
+    ) &&
+    /(behind|above|around).{0,24}(vanity|mirror)/.test(t);
+  // Similar impossible asks near mirror/vanity when no free wall zone is implied.
+  const blockedMirrorZoneAddOn =
+    /(add|install|introduce|create|put).{0,28}(tile strip|tile band|slab splash|stone splash|mosaic)/.test(
+      t,
+    ) &&
+    /(behind|under|around).{0,24}(mirror|vanity)/.test(t);
+  // Universal guard: do not propose "space behind sinks/vanity" add-ons in tweak cards.
+  const assumesBehindSinkRoom =
+    /(behind|back wall behind|area behind|space behind|wall behind).{0,20}(sink|sinks|vanity)/.test(t) ||
+    /(backsplash|accent wall|feature wall|tile band|wall panel|wallpaper).{0,28}(sink|sinks|vanity)/.test(
+      t,
+    );
+  return blockedVanityWallAddOn || blockedMirrorZoneAddOn || assumesBehindSinkRoom;
+}
+
+function sanitizeSuggestionsAgainstImageAGuardrails(
+  suggestions: TryTweakSuggestion[],
+  fallbacks: TryTweakSuggestion[],
+): TryTweakSuggestion[] {
+  return suggestions.map((row, idx) => {
+    const blocked =
+      suggestionAppearsToBeLayoutOrUpsizeDrift(row.text) ||
+      suggestionAppearsPhysicallyInfeasibleForVisibleScene(row.text);
+    if (!blocked) return row;
+    const fb = fallbacks[idx] ?? fallbacks[fallbacks.length - 1];
+    return {
+      text: fb?.text || row.text,
+      deltaMin: fb?.deltaMin ?? row.deltaMin,
+      deltaMax: fb?.deltaMax ?? row.deltaMax,
+    };
+  });
+}
+
+function normalizeSuggestionTextForCompare(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function suggestionTextsAreSimilar(a: string, b: string): boolean {
+  const na = normalizeSuggestionTextForCompare(a);
+  const nb = normalizeSuggestionTextForCompare(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const wa = new Set(na.split(" ").filter((w) => w.length > 2));
+  const wb = new Set(nb.split(" ").filter((w) => w.length > 2));
+  if (!wa.size || !wb.size) return false;
+  let overlap = 0;
+  for (const w of wa) {
+    if (wb.has(w)) overlap += 1;
+  }
+  const ratio = overlap / Math.min(wa.size, wb.size);
+  return ratio >= 0.7;
+}
+
+function pruneUsedTweakSuggestions(params: {
+  suggestions: TryTweakSuggestion[];
+  selectedThisRun: string[];
+  fallbackSuggestions: TryTweakSuggestion[];
+}): TryTweakSuggestion[] {
+  const selected = params.selectedThisRun.map(normalizeSuggestionTextForCompare).filter(Boolean);
+  const out: TryTweakSuggestion[] = [];
+  for (const row of params.suggestions) {
+    const isBlocked = selected.some((picked) => suggestionTextsAreSimilar(row.text, picked));
+    const isDup = out.some((existing) => suggestionTextsAreSimilar(existing.text, row.text));
+    if (isBlocked || isDup) continue;
+    out.push(row);
+  }
+  if (out.length < TRY_SUGGESTIONS_PER_CATEGORY) {
+    for (const fb of params.fallbackSuggestions) {
+      const isBlocked = selected.some((picked) => suggestionTextsAreSimilar(fb.text, picked));
+      const isDup = out.some((existing) => suggestionTextsAreSimilar(existing.text, fb.text));
+      if (isBlocked || isDup) continue;
+      out.push(fb);
+      if (out.length >= TRY_SUGGESTIONS_PER_CATEGORY) break;
+    }
+  }
+  return out.slice(0, TRY_SUGGESTIONS_PER_CATEGORY);
 }
 
 function clampMoney(value: unknown, fallback: number): number {
@@ -529,6 +864,9 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     "- Delta bands should be plausible vs your estimate_min/estimate_max (same order of magnitude as the job, not six-figure swings for paint-only tweaks).",
     "- improve_design — **mandatory mental pass before JSON**: (1) Silently inventory what IMAGE A already shows (tile, metals, glass, vanity, lighting, paint, niche, fixtures, decor). (2) Your four lines must each target a gap, weakness, or finer tier **in A** — not a headline upgrade already prominent in A. (3) If you cannot find four distinct ideas, use **smaller** refinements (mirror size/shape, hardware cohesion, grout/contrast, shelf/styling, fan grille, switch/dimmer tier, towel storage) that A plausibly does not yet emphasize.",
     "- improve_design — **forbidden violations** (treat as hard errors to avoid): suggesting a finish or fixture style that already matches IMAGE A; generic style language that ignores what A already changed from B.",
+    "- improve_design — NEVER propose enlarging/resizing fixtures (e.g., bigger mirror, wider vanity, larger shower) unless IMAGE A clearly shows that element as undersized/problematic. Prefer finish/material/lighting/accessory refinements over size changes.",
+    "- improve_design — NEVER suggest adding wall features into blocked zones. If IMAGE A shows a large mirror or fixture occupying the vanity wall, do not suggest backsplash/accent-wall/tile-band additions behind or above that occupied area unless your suggestion explicitly replaces that existing element first.",
+    "- improve_design — Treat the wall behind sinks/vanity as potentially occupied by mirror/cabinet/lighting; default to NO available wall area there. Do not suggest additions 'behind sinks' unless replacement/demolition of existing elements is explicitly the suggestion.",
     "- save_money: Same discipline — propose trims or swaps that still make sense given what IMAGE A already established vs B; do not recommend undoing or replacing something that is already the cheaper path in A.",
     params.userDescription.trim()
       ? "- User notes describe this analysis pass (e.g. a new tweak): if visible scope in A vs B changed, move dollars accordingly; save_money and improve_design must be freshly written for **this exact IMAGE A** (no canned lines; nothing already visible in A)."
@@ -692,12 +1030,20 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     TRY_SUGGESTIONS_PER_CATEGORY,
     true,
   );
+  out.saveMoneySuggestions = sanitizeSuggestionsAgainstImageAGuardrails(
+    out.saveMoneySuggestions,
+    params.styleDefaults.saveMoneySuggestions,
+  );
   out.improveDesignSuggestions = normalizeTryTweakSuggestions(
     parsed.improve_design,
     params.styleDefaults.improveDesignSuggestions,
     320,
     TRY_SUGGESTIONS_PER_CATEGORY,
     false,
+  );
+  out.improveDesignSuggestions = sanitizeSuggestionsAgainstImageAGuardrails(
+    out.improveDesignSuggestions,
+    params.styleDefaults.improveDesignSuggestions,
   );
 
   return out;
@@ -738,22 +1084,33 @@ async function evaluateBathroomResultQuality(params: {
   beforeImageUrl: string;
   afterImageUrl: string;
   selectedStyle: BathroomStyleId;
+  /** When true, wet-area enclosure may legitimately change — do not fail QA for glass/opening edits. */
+  wetZoneRemodelIntent?: boolean;
 }): Promise<{ pass: boolean; issues: string[] }> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return { pass: true, issues: [] };
 
+  const wetNote = params.wetZoneRemodelIntent
+    ? "IMPORTANT: Homeowner requested tub/shower remodel visualization (e.g. walk-in). wet_area_preserved must be true if a shower/tub wet zone still exists in the same general corner/alcove of the room (same plumbing zone), EVEN IF glass, door, curb, or enclosure layout changed. Only false if the wet fixture vanished or moved to a different wall zone."
+    : "";
+
   const prompt = [
     "Compare BEFORE and AFTER bathroom images and return JSON only.",
+    wetNote,
     "Evaluate:",
     "1) layout_preserved: same room architecture, walls/subwalls/pony walls preserved (true/false)",
     "2) toilet_visible_in_before: is toilet visible in BEFORE (true/false)",
     "3) toilet_preserved_if_visible: if a toilet is visible in BEFORE, it is still visible in AFTER (true/false/unknown)",
-    "4) wet_area_preserved: shower/tub/wet-area footprint preserved and still present (true/false/unknown)",
+    params.wetZoneRemodelIntent
+      ? "4) wet_area_preserved: tub/shower wet zone still present in the same general bathroom zone (true/false/unknown). Enclosure/glass/curb changes alone do NOT count as failure."
+      : "4) wet_area_preserved: shower/tub/wet-area footprint preserved and still present (true/false/unknown)",
     "5) realistic_same_room: AFTER still looks like the same bathroom, not redesigned geometry (true/false)",
     "6) spa_retreat_strength_0_to_10: only score this when style is spa_retreat, else set to null",
     "7) issues: short list of concrete failures",
     `Selected style: ${params.selectedStyle}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   let res: Response;
   try {
@@ -798,7 +1155,10 @@ async function evaluateBathroomResultQuality(params: {
   const toilet = parsed.toilet_preserved_if_visible;
   const wetArea = parsed.wet_area_preserved;
   const toiletOk = toiletVisibleBefore ? toilet === true : true;
-  const wetAreaOk = wetArea === true;
+  const wetAreaOk =
+    params.wetZoneRemodelIntent
+      ? wetArea !== false
+      : wetArea === true;
   const spaScore =
     typeof parsed.spa_retreat_strength_0_to_10 === "number"
       ? parsed.spa_retreat_strength_0_to_10
@@ -823,10 +1183,35 @@ const QUALITY_RESCUE_PROMPT = [
   "- No architectural redesign; finishes and style only",
 ].join("\n");
 
+const QUALITY_RESCUE_PROMPT_WET_ZONE = [
+  "QUALITY RESCUE (WET-ZONE REMODEL OK) — PRIORITIZE:",
+  "- Keep every exterior bathroom wall, window, and door position as-is; same camera and room size read as the source",
+  "- Keep toilet visible if it is visible in the source image; keep vanity/dry areas unless the main prompt required changes",
+  "- In the wet zone: show a clear walk-in/curbless/tub-to-shower style result as requested; glass, curb, and opening may change within the existing wet footprint",
+  "- No new room addition, no moving the wet zone to a different wall, no hiding fixtures by reframing",
+].join("\n");
+
 /**
  * @param allowCookieMutation - Must be `false` when called from a Server Component (e.g. `/try` page load).
  * Next.js only allows `cookies().set` inside Server Actions / Route Handlers, not during RSC render.
  */
+/** Blocks generation/regeneration when style is admin-preview-only and viewer is not admin. */
+async function gateAdminOnlyStyle(
+  style: BathroomStyleConfig,
+  viewer: Awaited<ReturnType<typeof getViewerContext>>,
+): Promise<string | null> {
+  if (!style.adminOnly) return null;
+  if (!viewer.userId) {
+    return "Sign in with an admin account to use this preview style.";
+  }
+  const allowed = await resolveViewerIsAdmin({
+    userId: viewer.userId,
+    email: viewer.userEmail,
+  });
+  if (!allowed) return "That style is not available yet.";
+  return null;
+}
+
 async function getViewerContext(allowCookieMutation: boolean) {
   const supabase = await createClient();
   const {
@@ -934,6 +1319,25 @@ export async function captureRenovisionAttributionAction(
   }
 }
 
+export async function captureHomePageVisitAction(): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const viewer = await getViewerContext(true);
+    await trackTryEvent({
+      eventType: "home_page_view",
+      userId: viewer.userId,
+      anonymousSessionId: viewer.anonymousSessionId,
+      projectId: null,
+      metadata: {},
+    });
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not track home page visit.",
+    };
+  }
+}
+
 export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState> {
   try {
     const { userEmail, anonymousSessionId } = await getViewerContext(false);
@@ -1005,17 +1409,19 @@ export async function generateBathroomMockupAction(
   const style = getBathroomStyleById(selectedStyleId);
   if (!style) return { error: "Choose a style to continue." };
 
+  const viewer = await getViewerContext(true);
+  if (!viewer.userId && !viewer.anonymousSessionId) {
+    return { error: "Could not start your session." };
+  }
+  const adminGate = await gateAdminOnlyStyle(style, viewer);
+  if (adminGate) return { error: adminGate };
+
   const file = formData.get("bathroom_photo");
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Please upload your bathroom photo." };
   }
   if (file.size > 20 * 1024 * 1024) {
     return { error: "Image must be 20 MB or smaller." };
-  }
-
-  const viewer = await getViewerContext(true);
-  if (!viewer.userId && !viewer.anonymousSessionId) {
-    return { error: "Could not start your session." };
   }
   const incomingAttribution = attributionFromFormData(formData);
   await persistViewerAttribution({ viewer, attribution: incomingAttribution });
@@ -1099,13 +1505,17 @@ export async function generateBathroomMockupAction(
     metadata: { selected_style: style.id, mode: "initial" },
   });
 
+  const { prompt: initialTryPrompt, wetZoneRemodelIntent: initialWetZoneIntent } =
+    buildInitialTryGenerationPrompt(style.id, userDescription);
+
   const result = await runHomeownerTryMockupGeneration({
     projectId,
     selectedStyle: style.id,
-    additionalPrompt: buildGenerationPrompt(style.id, userDescription),
+    additionalPrompt: initialTryPrompt,
     regenerateFromRoom: true,
     refineFromMockupId: null,
     requireVertex: true,
+    wetZoneRemodelIntent: initialWetZoneIntent,
   });
 
   if (!result.ok) {
@@ -1139,15 +1549,17 @@ export async function generateBathroomMockupAction(
     beforeImageUrl: beforeForVision,
     afterImageUrl: generatedSigned.data.signedUrl,
     selectedStyle: style.id,
+    wetZoneRemodelIntent: initialWetZoneIntent,
   });
   if (!qualityCheck.pass) {
     await runHomeownerTryMockupGeneration({
       projectId,
       selectedStyle: style.id,
-      additionalPrompt: `${buildGenerationPrompt(style.id, userDescription)}\n\n${QUALITY_RESCUE_PROMPT}`,
+      additionalPrompt: `${initialTryPrompt}\n\n${initialWetZoneIntent ? QUALITY_RESCUE_PROMPT_WET_ZONE : QUALITY_RESCUE_PROMPT}`,
       regenerateFromRoom: true,
       refineFromMockupId: null,
       requireVertex: true,
+      wetZoneRemodelIntent: initialWetZoneIntent,
     });
     const rerunMockups = await listMockupsForHomeownerProject(projectId);
     const rerunLatest = [...rerunMockups].sort((a, b) => b.mockup_generation - a.mockup_generation)[0];
@@ -1246,6 +1658,7 @@ export async function regenerateBathroomMockupAction(
   | { error: string }
   | {
       success: true;
+      uploadedImageUrl: string;
       generatedImageUrl: string;
       projectId: string;
       selectedStyle: BathroomStyleId;
@@ -1276,6 +1689,7 @@ export async function regenerateBathroomMockupAction(
   const selectedStyleRaw = str(formData, "selected_style");
   const selectedStyle = (getBathroomStyleById(selectedStyleRaw)?.id ?? "clean_refresh") as BathroomStyleId;
   const selectedStyleConfig = getBathroomStyleById(selectedStyle) ?? getBathroomStyleById("clean_refresh");
+  if (!selectedStyleConfig) return { error: "Invalid style." };
   if (!generationId || !projectId) return { error: "Missing generation context." };
 
   const saveHintSelections = formData
@@ -1294,6 +1708,8 @@ export async function regenerateBathroomMockupAction(
   const sourceMockupId = str(formData, "source_mockup_id");
 
   const viewer = await getViewerContext(true);
+  const adminGate = await gateAdminOnlyStyle(selectedStyleConfig, viewer);
+  if (adminGate) return { error: adminGate };
   const incomingAttribution = attributionFromFormData(formData);
   await persistViewerAttribution({ viewer, attribution: incomingAttribution });
   const svc = createServiceClient();
@@ -1315,6 +1731,7 @@ export async function regenerateBathroomMockupAction(
   const customTweakRaw = String(formData.get("custom_tweak") ?? "")
     .trim()
     .slice(0, HOMEOWNER_CUSTOM_TWEAK_MAX_CHARS);
+  const forceOpenAiComparison = false;
 
   const multiHintActive = saveHintSelections.length > 0 || designHintSelections.length > 0;
   if (imageSource === "current_mockup" && !multiHintActive && !legacyHint && !customTweakRaw) {
@@ -1344,6 +1761,38 @@ export async function regenerateBathroomMockupAction(
 
   if (customTweakRaw) {
     additionalPromptCore = appendHomeownerCustomTweakBlock(additionalPromptCore, customTweakRaw);
+    additionalPromptCore = applyCustomPromptHardRequirements(additionalPromptCore, customTweakRaw);
+  }
+
+  additionalPromptCore = applyFixtureScaleDirectivesIfNeeded(additionalPromptCore, [
+    ...saveHintSelections,
+    ...designHintSelections,
+    legacyHint,
+    customTweakRaw,
+  ]);
+
+  const surgicalScope = buildSurgicalTweakScopeBlock({
+    saveHintSelections,
+    designHintSelections,
+    legacyHint,
+    customTweakRaw,
+  });
+  if (surgicalScope) {
+    additionalPromptCore = `${surgicalScope}\n\n${additionalPromptCore}`.slice(0, HOMEOWNER_TWEAK_PROMPT_MAX_CHARS);
+  }
+
+  const combinedTweakTextForWetZone = [
+    ...saveHintSelections,
+    ...designHintSelections,
+    legacyHint,
+    customTweakRaw,
+  ].join("\n");
+  const wetZoneRemodelIntent = detectWetZoneRemodelIntent(combinedTweakTextForWetZone);
+  if (wetZoneRemodelIntent) {
+    additionalPromptCore = `${buildWetZoneRemodelPromptBlock()}\n\n${additionalPromptCore}`.slice(
+      0,
+      HOMEOWNER_TWEAK_PROMPT_MAX_CHARS,
+    );
   }
 
   const hintForTelemetry = [
@@ -1360,7 +1809,10 @@ export async function regenerateBathroomMockupAction(
     multiHintActive ||
     Boolean(legacyHint) ||
     Boolean(customTweakRaw);
-  const additionalPromptFinal = appendTweakGuardrailsIfNeeded(additionalPromptCore, { tweakMode });
+  const additionalPromptFinal = appendTweakGuardrailsIfNeeded(additionalPromptCore, {
+    tweakMode,
+    wetZoneRemodelIntent,
+  });
 
   await trackTryEvent({
     eventType: "generation_started",
@@ -1373,6 +1825,8 @@ export async function regenerateBathroomMockupAction(
       hint_length: hintForTelemetry.length,
       image_source: imageSource,
       from_mockup_id: refineFromMockupId,
+      wet_zone_remodel: wetZoneRemodelIntent,
+      image_provider: "vertex",
     },
   });
 
@@ -1383,6 +1837,8 @@ export async function regenerateBathroomMockupAction(
     regenerateFromRoom,
     refineFromMockupId,
     requireVertex: true,
+    wetZoneRemodelIntent,
+    forceOpenAiComparison,
   });
   if (!run.ok) {
     await trackTryEvent({
@@ -1413,12 +1869,13 @@ export async function regenerateBathroomMockupAction(
       beforeImageUrl: beforeForVision,
       afterImageUrl: generatedSigned.data.signedUrl,
       selectedStyle,
+      wetZoneRemodelIntent,
     });
     if (!qa.pass) {
       /** Second full Vertex run after QA failure can double latency and hit route `maxDuration` — tweaks skip by default. */
       const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
       if (allowRescue) {
-        const rescuePrompt = `${additionalPromptFinal}\n\n${QUALITY_RESCUE_PROMPT}`;
+        const rescuePrompt = `${additionalPromptFinal}\n\n${wetZoneRemodelIntent ? QUALITY_RESCUE_PROMPT_WET_ZONE : QUALITY_RESCUE_PROMPT}`;
         await runHomeownerTryMockupGeneration({
           projectId,
           selectedStyle,
@@ -1426,6 +1883,8 @@ export async function regenerateBathroomMockupAction(
           regenerateFromRoom,
           refineFromMockupId,
           requireVertex: true,
+          wetZoneRemodelIntent,
+          forceOpenAiComparison,
         });
         const rerunMockups = await listMockupsForHomeownerProject(projectId);
         const rerunLatest = [...rerunMockups].sort((a, b) => b.mockup_generation - a.mockup_generation)[0];
@@ -1462,6 +1921,9 @@ export async function regenerateBathroomMockupAction(
   }
   if (hintForTelemetry) {
     estimateContextParts.push(`Tweak / hint / custom text: ${hintForTelemetry}`);
+    estimateContextParts.push(
+      "When writing new save_money/improve_design suggestions for this updated AFTER image, avoid repeating the exact same wording from the selected tweak text above unless still visually unresolved.",
+    );
   }
   if (imageSource === "current_mockup") {
     estimateContextParts.push(
@@ -1478,6 +1940,25 @@ export async function regenerateBathroomMockupAction(
     selectedStyle,
     userDescription: estimateUserNotes,
     styleDefaults,
+  });
+  const selectedSaveTextsThisRun = [
+    ...saveHintSelections,
+    ...(legacyKind === "save_money" && legacyHint ? [legacyHint] : []),
+  ];
+  const selectedDesignTextsThisRun = [
+    ...designHintSelections,
+    ...(legacyKind === "improve_design" && legacyHint ? [legacyHint] : []),
+    ...(customTweakRaw ? [customTweakRaw] : []),
+  ];
+  const saveMoneySuggestions = pruneUsedTweakSuggestions({
+    suggestions: estimateFromImages.saveMoneySuggestions,
+    selectedThisRun: selectedSaveTextsThisRun,
+    fallbackSuggestions: styleDefaults.saveMoneySuggestions,
+  });
+  const improveDesignSuggestions = pruneUsedTweakSuggestions({
+    suggestions: estimateFromImages.improveDesignSuggestions,
+    selectedThisRun: selectedDesignTextsThisRun,
+    fallbackSuggestions: styleDefaults.improveDesignSuggestions,
   });
 
   const versionTtl = 60 * 60;
@@ -1525,6 +2006,7 @@ export async function regenerateBathroomMockupAction(
   revalidatePath("/try");
   return {
     success: true,
+    uploadedImageUrl: beforeSigned.data?.signedUrl ?? "",
     generatedImageUrl: generatedSigned.data.signedUrl,
     projectId,
     selectedStyle,
@@ -1535,8 +2017,8 @@ export async function regenerateBathroomMockupAction(
     reasoning: estimateFromImages.reasoning,
     assumptions: estimateFromImages.assumptions,
     confidence: estimateFromImages.confidence,
-    saveMoneySuggestions: estimateFromImages.saveMoneySuggestions,
-    improveDesignSuggestions: estimateFromImages.improveDesignSuggestions,
+    saveMoneySuggestions,
+    improveDesignSuggestions,
     mockupVersions,
     activeMockupId: latest.id,
   };
