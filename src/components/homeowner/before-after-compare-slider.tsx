@@ -50,7 +50,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     <div className="space-y-3">
       <div
         ref={trackRef}
-        className="relative aspect-[3/4] min-h-[30rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-0"
+        className="relative aspect-[4/3] min-h-[20rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm"
         onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
       >
         <Image
