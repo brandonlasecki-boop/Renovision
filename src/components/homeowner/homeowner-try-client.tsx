@@ -3,6 +3,7 @@
 import {
   type ComponentPropsWithoutRef,
   useActionState,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -272,6 +273,21 @@ export function HomeownerTryClient({
   const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
   const [firstUploadPreviewUrl, setFirstUploadPreviewUrl] = useState<string | null>(null);
+  /**
+   * Blob URL for the “before” photo behind the generating loader. Kept separate from React state so a spurious
+   * empty `change` on the file input after submit (common in browsers) does not revoke the URL mid-load.
+   * Also used on mobile / large files when we skip the inline preview grid.
+   */
+  const loaderBeforeBlobUrlRef = useRef<string | null>(null);
+  const setLoaderBeforeBlob = useCallback((next: string | null) => {
+    if (loaderBeforeBlobUrlRef.current && loaderBeforeBlobUrlRef.current !== next) {
+      URL.revokeObjectURL(loaderBeforeBlobUrlRef.current);
+      loaderBeforeBlobUrlRef.current = null;
+    }
+    if (next) {
+      loaderBeforeBlobUrlRef.current = next;
+    }
+  }, []);
   const [storedAttribution, setStoredAttribution] = useState<RenovisionAttribution | null>(null);
   const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
   const bathroomCameraInputRef = useRef<HTMLInputElement>(null);
@@ -310,8 +326,9 @@ export function HomeownerTryClient({
     setQuickStyleSwitchMode(false);
     setCompareBeforeSelection("original");
     setFirstUploadPreviewUrl(null);
+    setLoaderBeforeBlob(null);
     setStep("style");
-  }, [startNewProject, startNewToken]);
+  }, [startNewProject, startNewToken, setLoaderBeforeBlob]);
 
   useEffect(() => {
     if (generateState && "success" in generateState && generateState.success) {
@@ -319,9 +336,10 @@ export function HomeownerTryClient({
       setCompareBeforeSelection("original");
       setStep("result");
       setFirstUploadPreviewUrl(null);
+      setLoaderBeforeBlob(null);
       trackEvent("remodel_generated");
     }
-  }, [generateState]);
+  }, [generateState, setLoaderBeforeBlob]);
 
   useEffect(() => {
     if (!generatePending) return;
@@ -332,11 +350,6 @@ export function HomeownerTryClient({
     }, 90000);
     return () => window.clearTimeout(timeoutId);
   }, [generatePending]);
-
-  useEffect(() => {
-    if (!firstUploadPreviewUrl) return;
-    return () => URL.revokeObjectURL(firstUploadPreviewUrl);
-  }, [firstUploadPreviewUrl]);
 
   useEffect(() => {
     if (regenState && "success" in regenState && regenState.success) {
@@ -551,7 +564,9 @@ export function HomeownerTryClient({
           hint={loadingCopy.hint}
           elapsedSec={loadingElapsedSec}
           progressSteps={loadingProgressSteps}
-          beforeImageUrl={generation?.uploadedImageUrl ?? firstUploadPreviewUrl}
+          beforeImageUrl={
+            generation?.uploadedImageUrl ?? firstUploadPreviewUrl ?? loaderBeforeBlobUrlRef.current ?? undefined
+          }
         />
       ) : null}
 
@@ -751,11 +766,13 @@ export function HomeownerTryClient({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) {
-                    setFirstUploadPreviewUrl(null);
+                    // Browsers often fire `change` with an empty value after form submit. Do not clear blob URLs
+                    // here or the generating loader loses the “before” image mid-request.
                     return;
                   }
                   if (isLikelyMobileBrowser() && isLikelyHeic(file)) {
                     setFirstUploadPreviewUrl(null);
+                    setLoaderBeforeBlob(null);
                     toast.error("This photo format is not supported on mobile upload.", {
                       description: "Please use a JPG or PNG photo (iPhone: Camera > Formats > Most Compatible).",
                     });
@@ -764,6 +781,7 @@ export function HomeownerTryClient({
                   }
                   if (isLikelyMobileBrowser() && file.size > MAX_SAFE_MOBILE_UPLOAD_BYTES) {
                     setFirstUploadPreviewUrl(null);
+                    setLoaderBeforeBlob(null);
                     toast.error("Photo is too large for reliable mobile generation.", {
                       description: "Please choose a smaller image (under 12 MB) or retake at a lower resolution.",
                     });
@@ -776,6 +794,7 @@ export function HomeownerTryClient({
                   });
                   if (isLikelyMobileBrowser()) {
                     setFirstUploadPreviewUrl(null);
+                    setLoaderBeforeBlob(URL.createObjectURL(file));
                     toast.message("Photo selected", {
                       description: "Preview is skipped on mobile to prevent browser crashes from large images.",
                     });
@@ -783,12 +802,15 @@ export function HomeownerTryClient({
                   }
                   if (!previewAllowed(file)) {
                     setFirstUploadPreviewUrl(null);
+                    setLoaderBeforeBlob(URL.createObjectURL(file));
                     toast.message("Photo selected", {
                       description: "Preview skipped for very large image to keep mobile stable.",
                     });
                     return;
                   }
-                  setFirstUploadPreviewUrl(URL.createObjectURL(file));
+                  const u = URL.createObjectURL(file);
+                  setLoaderBeforeBlob(u);
+                  setFirstUploadPreviewUrl(u);
                 }}
               />
               <input
@@ -861,6 +883,7 @@ export function HomeownerTryClient({
                 variant="outline"
                 onClick={() => {
                   setFirstUploadPreviewUrl(null);
+                  setLoaderBeforeBlob(null);
                   setQuickStyleSwitchMode(false);
                   setStep("style");
                 }}
@@ -1191,6 +1214,8 @@ export function HomeownerTryClient({
                     setLeadOpen(false);
                     setQuickStyleSwitchMode(false);
                     setCompareBeforeSelection("original");
+                    setFirstUploadPreviewUrl(null);
+                    setLoaderBeforeBlob(null);
                     setStep("style");
                   }}
                 >

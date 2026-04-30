@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { MarketingLinkBuilder } from "@/components/admin/marketing-link-builder";
-
 import {
   fetchRenovisionActiveProjects,
   fetchRenovisionActiveSessions,
@@ -459,11 +457,9 @@ export default async function RenovisionAdminPage({
 
           <PageSection
             title="Marketing & data tables"
-            description="Build tracked links, review daily performance, then filter detailed rows by id or email."
+            description="Review daily link performance, then filter detailed rows by id or email."
           >
             <div className="space-y-6">
-            <MarketingLinkBuilder baseUrl="https://www.getrenovision.com" />
-
             <TableShell
               title="Daily link performance"
               subtitle="Per unique link id (src) and day — sessions, generations, saves, and leads."

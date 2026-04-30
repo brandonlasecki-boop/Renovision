@@ -900,6 +900,16 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return params.styleDefaults;
 
+  /** Faster vision tokens on estimate-only images; set TRY_DISABLE_FAST_HOMEOWNER_ESTIMATE=1 for full detail (slower). */
+  const fastEstimate = process.env.TRY_DISABLE_FAST_HOMEOWNER_ESTIMATE?.trim() !== "1";
+  const estimateImageDetail = fastEstimate ? ("low" as const) : ("high" as const);
+
+  const signalsPromise = detectVisibleScopeDiffSignals({
+    apiKey,
+    beforeImageUrl: params.beforeImageUrl,
+    afterImageUrl: params.afterImageUrl,
+  });
+
   const prompt = [
     "You are a senior remodeling estimator for U.S. homeowner bathroom work (typical metro contractor pricing — not design-magazine or coastal luxury unless IMAGE A clearly shows that tier).",
     "IMAGE A (mockup) is already shown above this text; IMAGE B (original) is shown above too. For **save_money** and **improve_design** only: reason from **IMAGE A first** — those lines must read as refinements on the current render, not as if the homeowner were still staring at the old B photo.",
@@ -991,12 +1001,12 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
                 type: "text",
                 text: "IMAGE A — CURRENT MOCKUP (latest render). This frame is the achieved design: every visible finish, palette choice, and style direction lives here. Tweak suggestions must describe deltas **from this frame**, not from imagination of the old room.",
               },
-              { type: "image_url", image_url: { url: params.afterImageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: params.afterImageUrl, detail: estimateImageDetail } },
               {
                 type: "text",
                 text: "IMAGE B — ORIGINAL BEFORE. Use with A for cost totals, breakdown, reasoning, and assumptions (what changed, what labor likely applied). Do **not** use B alone to justify `improve_design` lines that duplicate what A already shows.",
               },
-              { type: "image_url", image_url: { url: params.beforeImageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: params.beforeImageUrl, detail: estimateImageDetail } },
               { type: "text", text: prompt },
             ],
           },
@@ -1004,10 +1014,12 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
       }),
     });
   } catch {
+    await signalsPromise.catch(() => null);
     console.warn("[try-estimate] OpenAI request aborted or timed out; using style defaults.");
     return params.styleDefaults;
   }
   if (!res.ok) {
+    await signalsPromise.catch(() => null);
     const errText = await res.text().catch(() => "");
     console.warn("[try-estimate] OpenAI chat completions failed:", res.status, errText.slice(0, 500));
     return params.styleDefaults;
@@ -1017,9 +1029,12 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
   const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
   const parsed = parseJsonObject(raw);
   if (!parsed) {
+    await signalsPromise.catch(() => null);
     console.warn("[try-estimate] Could not parse estimator JSON; using style defaults. Snippet:", raw.slice(0, 280));
     return params.styleDefaults;
   }
+
+  const visibleSignals = await signalsPromise;
 
   const out: BathroomEstimateBreakdown = {
     estimateRange: {
@@ -1090,12 +1105,6 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
       return !/(mirror|medicine cabinet)/.test(combined);
     });
   }
-
-  const visibleSignals = await detectVisibleScopeDiffSignals({
-    apiKey,
-    beforeImageUrl: params.beforeImageUrl,
-    afterImageUrl: params.afterImageUrl,
-  });
 
   if (visibleSignals?.doorOrWindowChanged) {
     const hasDoorWindowLine = hasBreakdownTopic(
@@ -1665,8 +1674,11 @@ export async function generateBathroomMockupAction(
     return { error: "Could not load the generated image." };
   }
 
-  const uploadedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(beforePath, 60 * 60);
-  let generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(latest.storage_path, 60 * 60);
+  const [uploadedSigned, generatedSignedInitial] = await Promise.all([
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(beforePath, 60 * 60),
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(latest.storage_path, 60 * 60),
+  ]);
+  let generatedSigned = generatedSignedInitial;
   if (!uploadedSigned.data?.signedUrl || !generatedSigned.data?.signedUrl) {
     return { error: "Could not prepare image preview." };
   }
@@ -1992,8 +2004,11 @@ export async function regenerateBathroomMockupAction(
   }
   const project = await getHomeownerTryProjectById(projectId);
   if (!project?.before_storage_path) return { error: "Missing source image." };
-  const beforeSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(project.before_storage_path, 60 * 60);
-  let generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(latest.storage_path, 60 * 60);
+  const [beforeSigned, generatedSignedInitial] = await Promise.all([
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(project.before_storage_path, 60 * 60),
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(latest.storage_path, 60 * 60),
+  ]);
+  let generatedSigned = generatedSignedInitial;
   const beforeForVision =
     (await beforeImageUrlForOpenAiVision(svc, project.before_storage_path, beforeSigned.data?.signedUrl)) ||
     generatedSigned.data?.signedUrl ||
@@ -2297,12 +2312,10 @@ export async function loadTryGenerationForViewer(params: {
   if (!style) return null;
   const defaults = defaultEstimateFromStyle(style);
 
-  const beforeSigned = await svc.storage
-    .from(PHOTOS_BUCKET)
-    .createSignedUrl(String(generation.uploaded_image_url || ""), 60 * 60);
-  const afterSigned = await svc.storage
-    .from(PHOTOS_BUCKET)
-    .createSignedUrl(String(generation.generated_image_url || ""), 60 * 60);
+  const [beforeSigned, afterSigned] = await Promise.all([
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(String(generation.uploaded_image_url || ""), 60 * 60),
+    svc.storage.from(PHOTOS_BUCKET).createSignedUrl(String(generation.generated_image_url || ""), 60 * 60),
+  ]);
   if (!beforeSigned.data?.signedUrl || !afterSigned.data?.signedUrl) return null;
 
   const mockupVersions = await loadSignedMockupVersionsForProject(projectId, 60 * 60);
