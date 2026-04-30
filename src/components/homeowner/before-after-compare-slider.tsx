@@ -21,6 +21,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileAspectRatio, setMobileAspectRatio] = useState<number>(4 / 3);
   const trackRef = useRef<HTMLDivElement>(null);
+  const imageFitClass = isMobileViewport ? "object-cover" : "object-contain";
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -34,9 +35,9 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
     const img = new window.Image();
     img.onload = () => {
       if (!img.naturalWidth || !img.naturalHeight) return;
-      // Keep slider reasonably wide on phones while respecting portrait photos.
+      // Keep slider reasonably wide on phones while avoiding extra-tall cards.
       const ratio = img.naturalWidth / img.naturalHeight;
-      const clamped = Math.max(0.55, Math.min(1.6, ratio));
+      const clamped = Math.max(0.75, Math.min(1.4, ratio));
       setMobileAspectRatio(clamped);
     };
     img.src = afterUrl;
@@ -80,7 +81,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           src={afterUrl}
           alt="After remodel"
           fill
-          className="pointer-events-none object-contain"
+          className={`pointer-events-none ${imageFitClass}`}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
           quality={75}
           priority={false}
@@ -95,7 +96,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={beforeUrl}
             alt="Before remodel"
             fill
-            className="object-contain"
+            className={imageFitClass}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
             quality={75}
             priority={false}
@@ -153,7 +154,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={beforeUrl}
             alt="Before full preview"
             fill
-            className="object-contain"
+            className={imageFitClass}
             sizes="(max-width: 640px) 48vw, 360px"
             quality={70}
             loading="lazy"
@@ -174,7 +175,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={afterUrl}
             alt="After full preview"
             fill
-            className="object-contain"
+            className={imageFitClass}
             sizes="(max-width: 640px) 48vw, 360px"
             quality={70}
             loading="lazy"
