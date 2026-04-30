@@ -99,7 +99,7 @@ export const BATHROOM_STYLES: BathroomStyleConfig[] = [
   {
     id: "coastal_beach_house",
     name: "Coastal Beach House",
-    subtitle: "Bright, airy, beach-inspired (admin preview)",
+    subtitle: "Bright, airy, beach-inspired",
     estimateMin: 10000,
     estimateMax: 20000,
     materialMin: 3800,
@@ -110,7 +110,6 @@ export const BATHROOM_STYLES: BathroomStyleConfig[] = [
     fixturesMax: 3500,
     scopeSeed:
       "coastal beach house bathroom with light airy colors, soft blue and sand tones, light wood or white vanity, bright natural-feeling tile, woven textures, and relaxed beach-house character while preserving layout",
-    adminOnly: true,
   },
 ];
 

@@ -44,7 +44,7 @@ export default async function AdminContractorsPage({
           <input
             name="q"
             defaultValue={query}
-            placeholder="Search by name, email, phone, project id, or lead id"
+            placeholder="Search by name, email, phone, ZIP, address, project id, or lead id"
             className="h-10 flex-1 rounded-xl border border-input bg-background px-3 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
           />
           <button
@@ -58,13 +58,14 @@ export default async function AdminContractorsPage({
 
       <section className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1280px] text-left text-sm">
+          <table className="w-full min-w-[1380px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/60 bg-muted/20">
                 <th className="px-4 py-3 font-semibold">Created</th>
                 <th className="px-4 py-3 font-semibold">Name</th>
                 <th className="px-4 py-3 font-semibold">Email</th>
                 <th className="px-4 py-3 font-semibold">Phone</th>
+                <th className="px-4 py-3 font-semibold">Address</th>
                 <th className="px-4 py-3 font-semibold">ZIP</th>
                 <th className="px-4 py-3 font-semibold">Timeline</th>
                 <th className="px-4 py-3 font-semibold">Budget</th>
@@ -77,7 +78,7 @@ export default async function AdminContractorsPage({
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">
                     No leads found.
                   </td>
                 </tr>
@@ -88,6 +89,9 @@ export default async function AdminContractorsPage({
                     <td className="px-4 py-3 font-medium">{lead.fullName}</td>
                     <td className="px-4 py-3">{lead.email || "—"}</td>
                     <td className="px-4 py-3">{lead.phone || "—"}</td>
+                    <td className="max-w-[200px] truncate px-4 py-3 text-muted-foreground" title={lead.streetAddress || undefined}>
+                      {lead.streetAddress || "—"}
+                    </td>
                     <td className="px-4 py-3">{lead.zipCode || "—"}</td>
                     <td className="px-4 py-3">{lead.timeline || "—"}</td>
                     <td className="px-4 py-3">{lead.budgetRange || "—"}</td>

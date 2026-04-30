@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   generateBathroomMockupAction,
+  pollTryEstimateRefinementAction,
   regenerateBathroomMockupAction,
   selectTryMockupVersionAction,
   submitBathroomLeadAction,
@@ -266,6 +267,7 @@ export function HomeownerTryClient({
     improveDesignSuggestions: TryTweakSuggestion[];
     mockupVersions: TryMockupVersionRow[];
     activeMockupId: string;
+    estimateRefinementPending?: boolean;
   } | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
@@ -348,11 +350,61 @@ export function HomeownerTryClient({
     const timeoutId = window.setTimeout(() => {
       toast.message("Still generating...", {
         description:
-          "Complex renders can take a few minutes. You can keep this tab open. If it fails, try a smaller JPG/PNG photo.",
+          "Complex renders often need 1–3 mins. You can keep this tab open. If it fails, try a smaller JPG/PNG photo.",
       });
     }, slowGenerationToastMs);
     return () => window.clearTimeout(timeoutId);
   }, [generatePending, regenPending]);
+
+  useEffect(() => {
+    if (!generation?.estimateRefinementPending) return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 45;
+    const intervalMs = 3000;
+    const tick = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const r = await pollTryEstimateRefinementAction(generation.generationId, generation.projectId);
+        if (!r.ready) {
+          if (attempts >= maxAttempts) {
+            setGeneration((prev) => (prev ? { ...prev, estimateRefinementPending: false } : null));
+          }
+          return;
+        }
+        setGeneration((prev) =>
+          prev
+            ? {
+                ...prev,
+                estimateRange: r.estimateRange,
+                breakdown: r.breakdown,
+                detailedBreakdown: r.detailedBreakdown,
+                reasoning: r.reasoning,
+                assumptions: r.assumptions,
+                confidence: r.confidence,
+                saveMoneySuggestions: r.saveMoneySuggestions,
+                improveDesignSuggestions: r.improveDesignSuggestions,
+                estimateRefinementPending: false,
+              }
+            : null,
+        );
+        toast.message("Cost estimate updated", { description: "Based on your before and after photos." });
+      } catch {
+        if (attempts >= maxAttempts) {
+          setGeneration((prev) => (prev ? { ...prev, estimateRefinementPending: false } : null));
+        }
+      }
+    };
+    const id = window.setInterval(() => {
+      void tick();
+    }, intervalMs);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [generation?.estimateRefinementPending, generation?.generationId, generation?.projectId]);
 
   useEffect(() => {
     if (regenState && "success" in regenState && regenState.success) {
@@ -375,6 +427,7 @@ export function HomeownerTryClient({
                 regenState.improveDesignSuggestions ?? prev.improveDesignSuggestions ?? [],
               mockupVersions: regenState.mockupVersions,
               activeMockupId: regenState.activeMockupId,
+              estimateRefinementPending: false,
             }
           : prev,
       );
@@ -411,6 +464,7 @@ export function HomeownerTryClient({
                     improveDesignSuggestions: versionState.improveDesignSuggestions!,
                   }
                 : {}),
+              estimateRefinementPending: false,
             }
           : prev,
       );
@@ -478,13 +532,13 @@ export function HomeownerTryClient({
     if (generatePending) {
       return {
         title: "Designing your bathroom...",
-        hint: "Usually about 1–2 minutes (AI image + budget estimate)",
+        hint: "Usually 1–3 mins for your preview. Cost details may update right after it appears.",
       };
     }
     if (regenPending) {
       return {
         title: "Applying your tweak…",
-        hint: "Usually about 1–2 minutes",
+        hint: "Usually 1–3 mins",
       };
     }
     if (versionPending) {
@@ -495,7 +549,7 @@ export function HomeownerTryClient({
     }
     return {
       title: "Creating your bathroom remodel…",
-      hint: "Often about one to two minutes.",
+      hint: "Usually 1–3 mins",
     };
   }, [generatePending, regenPending, versionPending]);
 
@@ -1083,6 +1137,11 @@ export function HomeownerTryClient({
                   <span className="mx-1.5 font-semibold text-muted-foreground/80">–</span>
                   {usd.format(generation.estimateRange.max)}
                 </p>
+                {generation.estimateRefinementPending ? (
+                  <p className="mt-2 max-w-xl text-xs font-medium text-muted-foreground">
+                    Narrowing this range from your photos… (usually under a minute)
+                  </p>
+                ) : null}
               </div>
 
               <details className="group border-t border-border/70 bg-muted/20">
@@ -1270,11 +1329,32 @@ export function HomeownerTryClient({
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="lead_phone">Phone</Label>
-                  <Input id="lead_phone" name="phone" required />
+                  <Input id="lead_phone" name="phone" required autoComplete="tel" />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="lead_zip">Zip code</Label>
-                  <Input id="lead_zip" name="zip_code" required />
+                  <Label htmlFor="lead_zip">ZIP code</Label>
+                  <Input
+                    id="lead_zip"
+                    name="zip_code"
+                    required
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    placeholder="12345"
+                    maxLength={10}
+                    className="font-mono tabular-nums"
+                    title="US ZIP: 5 digits or ZIP+4"
+                    pattern="\d{5}(-\d{4})?"
+                  />
+                  <p className="text-xs text-muted-foreground">Required — we use this to match you with local remodelers.</p>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="lead_street">Street address (optional)</Label>
+                  <Input
+                    id="lead_street"
+                    name="street_address"
+                    autoComplete="street-address"
+                    placeholder="Street, unit, city (optional)"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="lead_timeline">Timeline</Label>

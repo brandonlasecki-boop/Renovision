@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -78,10 +79,20 @@ export type TryGenerationViewState = {
   improveDesignSuggestions: TryTweakSuggestion[];
   mockupVersions: SignedTryMockupVersion[];
   activeMockupId: string;
+  /** True right after first generate while the vision cost estimate runs in the background. */
+  estimateRefinementPending?: boolean;
 };
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
+}
+
+/** US ZIP: 5 digits or ZIP+4. Returns canonical form or null. */
+function normalizeUsZipCode(raw: string): string | null {
+  const t = raw.trim();
+  if (/^\d{5}$/.test(t)) return t;
+  if (/^\d{5}-\d{4}$/.test(t)) return t;
+  return null;
 }
 
 /**
@@ -522,6 +533,80 @@ type BathroomEstimateBreakdown = {
   improveDesignSuggestions: TryTweakSuggestion[];
 };
 
+const TRY_ESTIMATE_SNAPSHOT_VERSION = 1;
+
+function tryEstimateSnapshotFromBreakdown(b: BathroomEstimateBreakdown): Record<string, unknown> {
+  return {
+    v: TRY_ESTIMATE_SNAPSHOT_VERSION,
+    estimateRange: b.estimateRange,
+    breakdown: b.breakdown,
+    detailedBreakdown: b.detailedBreakdown,
+    reasoning: b.reasoning,
+    assumptions: b.assumptions,
+    confidence: b.confidence,
+    saveMoneySuggestions: b.saveMoneySuggestions,
+    improveDesignSuggestions: b.improveDesignSuggestions,
+  };
+}
+
+export type TryEstimatePollFields = {
+  estimateRange: { min: number; max: number };
+  breakdown: TryGenerationViewState["breakdown"];
+  detailedBreakdown: TryGenerationViewState["detailedBreakdown"];
+  reasoning: string[];
+  assumptions: string[];
+  confidence: TryGenerationViewState["confidence"];
+  saveMoneySuggestions: TryTweakSuggestion[];
+  improveDesignSuggestions: TryTweakSuggestion[];
+};
+
+function parseTryEstimateSnapshotJson(raw: unknown): TryEstimatePollFields | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (Number(o.v) !== TRY_ESTIMATE_SNAPSHOT_VERSION) return null;
+  const er = o.estimateRange as Record<string, unknown> | undefined;
+  const bd = o.breakdown as Record<string, unknown> | undefined;
+  if (!er || !bd) return null;
+  const min = Number(er.min);
+  const max = Number(er.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  const materials = bd.materials as Record<string, unknown> | undefined;
+  const labor = bd.labor as Record<string, unknown> | undefined;
+  const fixtures = bd.fixtures as Record<string, unknown> | undefined;
+  if (!materials || !labor || !fixtures) return null;
+  const confidenceRaw = String(o.confidence ?? "medium").toLowerCase();
+  const confidence =
+    confidenceRaw === "low" || confidenceRaw === "medium" || confidenceRaw === "high" ? confidenceRaw : "medium";
+  const mapSuggestions = (arr: unknown, savings: boolean): TryTweakSuggestion[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((row) => parseSuggestionImpactRow(row, { text: "", deltaMin: 0, deltaMax: 0 }, savings));
+  };
+  return {
+    estimateRange: { min, max },
+    breakdown: {
+      materials: { min: Number(materials.min), max: Number(materials.max) },
+      labor: { min: Number(labor.min), max: Number(labor.max) },
+      fixtures: { min: Number(fixtures.min), max: Number(fixtures.max) },
+    },
+    detailedBreakdown: Array.isArray(o.detailedBreakdown)
+      ? o.detailedBreakdown
+          .filter((x): x is Record<string, unknown> => Boolean(x && typeof x === "object"))
+          .map((x) => ({
+            category: String(x.category ?? "").trim().slice(0, 140),
+            min: Number(x.min),
+            max: Number(x.max),
+            reason: String(x.reason ?? "").trim().slice(0, 320),
+          }))
+          .filter((x) => x.category)
+      : [],
+    reasoning: Array.isArray(o.reasoning) ? o.reasoning.map((x) => String(x).trim()).filter(Boolean) : [],
+    assumptions: Array.isArray(o.assumptions) ? o.assumptions.map((x) => String(x).trim()).filter(Boolean) : [],
+    confidence,
+    saveMoneySuggestions: mapSuggestions(o.saveMoneySuggestions, true),
+    improveDesignSuggestions: mapSuggestions(o.improveDesignSuggestions, false),
+  };
+}
+
 type VisibleScopeDiffSignals = {
   mirrorChanged: boolean;
   doorOrWindowChanged: boolean;
@@ -787,16 +872,318 @@ async function detectVisibleScopeDiffSignals(params: {
   }
 }
 
-function defaultEstimateFromStyle(style: {
-  estimateMin: number;
-  estimateMax: number;
-  materialMin: number;
-  materialMax: number;
-  laborMin: number;
-  laborMax: number;
-  fixturesMin: number;
-  fixturesMax: number;
-}): BathroomEstimateBreakdown {
+function tweakPair(text: string, deltaMin: number, deltaMax: number): TryTweakSuggestion {
+  return { text, deltaMin, deltaMax };
+}
+
+/** When vision/JSON fails, tweak bullets must still match the homeowner's style — not generic spa copy. */
+function fallbackTweakSuggestionsForStyle(styleId: BathroomStyleId): {
+  saveMoneySuggestions: TryTweakSuggestion[];
+  improveDesignSuggestions: TryTweakSuggestion[];
+} {
+  switch (styleId) {
+    case "spa_retreat":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Choose larger-format porcelain in a calm spa tone instead of small-format mosaic or intricate layouts.",
+            -900,
+            -350,
+          ),
+          tweakPair(
+            "Keep existing lighting locations; upgrade to simpler damp-rated fixtures with similar warm-white output.",
+            -450,
+            -150,
+          ),
+          tweakPair(
+            "Swap premium stone-look materials for durable porcelain with a similar soft, bright character.",
+            -800,
+            -250,
+          ),
+          tweakPair(
+            "Phase towels, plants, and styling; finish wet-area and vanity surfaces first for the spa feel.",
+            -600,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Add cohesive warm accent pieces (linen towels, small wood accessory) that deepen the spa-calm palette.",
+            80,
+            400,
+          ),
+          tweakPair(
+            "Introduce slightly richer shower wall texture while staying bright and hotel-inspired.",
+            200,
+            900,
+          ),
+          tweakPair(
+            "Unify metal finishes on hooks, bars, and shower hardware for a cleaner resort-like look.",
+            120,
+            450,
+          ),
+          tweakPair(
+            "Softer one-step wall tone shift to tie floor and shower tile into one calm field.",
+            150,
+            550,
+          ),
+        ],
+      };
+    case "clean_refresh":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Use standard white or soft-neutral field tile with simple stack or offset pattern instead of specialty shapes.",
+            -700,
+            -250,
+          ),
+          tweakPair(
+            "Retain vanity carcass if sound; refinish or replace doors and top only for a budget modern look.",
+            -900,
+            -350,
+          ),
+          tweakPair(
+            "Paint and refresh hardware rather than a full fixture package where locations already work.",
+            -500,
+            -150,
+          ),
+          tweakPair(
+            "Phase accessories; prioritize tub or shower surround and vanity counter visibility first.",
+            -550,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Step up to a slightly crisper vanity faucet and coordinating cabinet hardware for a simple modern read.",
+            100,
+            380,
+          ),
+          tweakPair(
+            "Add one quality LED vanity bar or sconce tier for cleaner task light without moving boxes.",
+            150,
+            550,
+          ),
+          tweakPair(
+            "Unify grout and trim in white or stone-neutral choices so the refresh feels intentional, not patched.",
+            120,
+            400,
+          ),
+          tweakPair(
+            "Introduce subtle contrast on one focal plane (shower niche face or vanity wall) within the same neutral family.",
+            180,
+            650,
+          ),
+        ],
+      };
+    case "luxury_escape":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Keep a premium look with large-format porcelain slabs or book-matched lookalikes instead of full natural stone everywhere.",
+            -2500,
+            -800,
+          ),
+          tweakPair(
+            "Retain hero stone or tile on one focal wall; simplify secondary walls to coordinated porcelain.",
+            -1800,
+            -500,
+          ),
+          tweakPair(
+            "Specify mid-tier designer fixture lines with the same silhouette; avoid custom metal finishes.",
+            -1200,
+            -400,
+          ),
+          tweakPair(
+            "Phase decorative lighting and art; lock wet-area and vanity statement finishes first.",
+            -900,
+            -300,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Layer dim-to-warm lighting and a subtle accent (niche glow, toe-kick, or cove) to deepen dramatic contrast.",
+            250,
+            900,
+          ),
+          tweakPair(
+            "Upgrade to a thicker countertop edge and undermount refinement for a more bespoke vanity moment.",
+            400,
+            1200,
+          ),
+          tweakPair(
+            "Tighten the metal story to one luxury family across all touch points (brass, bronze, or polished nickel).",
+            200,
+            650,
+          ),
+          tweakPair(
+            "Add textural wall treatment or richer grout contrast on a key tile plane for a more editorial feel.",
+            300,
+            950,
+          ),
+        ],
+      };
+    case "bold_modern":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Keep the dark accent story with large-format charcoal or ink tile instead of small mosaic labor.",
+            -850,
+            -300,
+          ),
+          tweakPair(
+            "Use matte-black stock hardware lines rather than fully custom pulls and brackets.",
+            -500,
+            -180,
+          ),
+          tweakPair(
+            "Simplify shower glass to standard black-channel framing versus fully custom steel details when A allows.",
+            -1200,
+            -400,
+          ),
+          tweakPair(
+            "Phase decor; prioritize surfaces and fixtures that carry the sleek modern contrast.",
+            -550,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Sharpen contrast: crisper black trim, slim LED profile, or darker grout for a more architectural read.",
+            150,
+            600,
+          ),
+          tweakPair(
+            "Upgrade to a slimmer vanity profile or integrated handle detail for a more bespoke modern line.",
+            350,
+            1100,
+          ),
+          tweakPair(
+            "Unify all metals to matte black or one intentional mixed-metal story — no stray chrome.",
+            120,
+            450,
+          ),
+          tweakPair(
+            "Add a linear accent (stacked tile or metal trim) that reinforces the bold graphic character.",
+            200,
+            750,
+          ),
+        ],
+      };
+    case "warm_minimalist":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Keep the wood-tone vanity direction with veneer or RTA fronts instead of full custom millwork.",
+            -1100,
+            -400,
+          ),
+          tweakPair(
+            "Use large soft-neutral field tile with minimal pattern instead of handmade variation everywhere.",
+            -750,
+            -250,
+          ),
+          tweakPair(
+            "Retain existing lighting locations; upgrade to simple architectural fixtures with warm CCT.",
+            -450,
+            -150,
+          ),
+          tweakPair(
+            "Phase styling objects; invest in tile and wood hardware cohesion first.",
+            -550,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Refine wood stain warmth one step and match towel and textile tones for a calmer minimalist envelope.",
+            100,
+            450,
+          ),
+          tweakPair(
+            "Add quiet texture (fine-grain tile, limewash hint, or wool-look rug) without breaking simple shapes.",
+            200,
+            750,
+          ),
+          tweakPair(
+            "Unify to warm brass or soft black hardware so the palette feels edited, not mixed.",
+            120,
+            480,
+          ),
+          tweakPair(
+            "Improve indirect lighting (sconce glow, dimmer curve) to flatter the wood and neutrals.",
+            180,
+            620,
+          ),
+        ],
+      };
+    case "coastal_beach_house":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Use affordable light glazed tile in sand or sea-glass tones instead of specialty artisan mosaics.",
+            -800,
+            -280,
+          ),
+          tweakPair(
+            "Paint shiplap or flat panels in airy white or soft blue versus solid surfacing on large vertical areas.",
+            -600,
+            -200,
+          ),
+          tweakPair(
+            "Choose stock bathroom lines with relaxed shapes versus bespoke boutique coastal fixtures.",
+            -500,
+            -180,
+          ),
+          tweakPair(
+            "Phase woven accents and art; finish floor and shower in the bright beachy palette first.",
+            -550,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Layer a soft blue-green accent in towels or ceramics without muddying the airy base.",
+            90,
+            400,
+          ),
+          tweakPair(
+            "Add natural texture (light wood shelf, linen, subtle seagrass) within the bright relaxed mood.",
+            150,
+            550,
+          ),
+          tweakPair(
+            "Upgrade to consistent coastal metals (polished nickel or brushed gold) on hooks and vanity.",
+            130,
+            480,
+          ),
+          tweakPair(
+            "Improve natural-light feel with lighter privacy glass and brighter wall bounce.",
+            180,
+            600,
+          ),
+        ],
+      };
+    default: {
+      const _n: never = styleId;
+      return _n;
+    }
+  }
+}
+
+function styleLockBlockForEstimate(cfg: BathroomStyleConfig): string {
+  return [
+    "**STYLE LOCK (save_money + improve_design):**",
+    `- Homeowner chose **${cfg.name}** — ${cfg.subtitle}.`,
+    `- Every tweak line must stay in that lane: same palette family, fixture character, and mood as IMAGE A and this style.`,
+    "- save_money: cheaper swaps, trims, or phasing that **still read as this same style** — never undo the look to pivot to a different interior genre.",
+    "- improve_design: refinements that **deepen this style** (quality, cohesion, lighting, detail) — not a different named aesthetic (no farmhouse, industrial, or cottage cues unless IMAGE A already established them).",
+    `- Design intent anchor: ${cfg.scopeSeed}`,
+  ].join("\n");
+}
+
+function defaultEstimateFromStyle(style: BathroomStyleConfig): BathroomEstimateBreakdown {
+  const tweakFallbacks = fallbackTweakSuggestionsForStyle(style.id);
   return {
     estimateRange: { min: style.estimateMin, max: style.estimateMax },
     breakdown: {
@@ -833,50 +1220,8 @@ function defaultEstimateFromStyle(style: {
       "No hidden damage behind walls",
     ],
     confidence: "low",
-    saveMoneySuggestions: [
-      {
-        text: "Choose a simpler tile or a smaller-format tile with less intricate layout labor.",
-        deltaMin: -900,
-        deltaMax: -350,
-      },
-      {
-        text: "Keep existing lighting locations and upgrade fixtures only rather than relocating boxes.",
-        deltaMin: -450,
-        deltaMax: -150,
-      },
-      {
-        text: "Swap premium stone-look materials for durable porcelain in a similar tone.",
-        deltaMin: -800,
-        deltaMax: -250,
-      },
-      {
-        text: "Phase accessories and decor; prioritize wet-area and vanity surfaces first.",
-        deltaMin: -600,
-        deltaMax: -150,
-      },
-    ],
-    improveDesignSuggestions: [
-      {
-        text: "Add cohesive warm accent tones (towels, small wood accessory) to reinforce the spa palette.",
-        deltaMin: 80,
-        deltaMax: 400,
-      },
-      {
-        text: "Use slightly richer wall or shower tile texture while staying in the same footprint.",
-        deltaMin: 200,
-        deltaMax: 900,
-      },
-      {
-        text: "Unify metal finishes on towel bars, hooks, and vanity hardware for a cleaner look.",
-        deltaMin: 120,
-        deltaMax: 450,
-      },
-      {
-        text: "Soften wall color one step warmer to tie floor and shower tile together.",
-        deltaMin: 150,
-        deltaMax: 550,
-      },
-    ],
+    saveMoneySuggestions: tweakFallbacks.saveMoneySuggestions,
+    improveDesignSuggestions: tweakFallbacks.improveDesignSuggestions,
   };
 }
 
@@ -885,6 +1230,7 @@ const TRY_ESTIMATE_SYSTEM_PROMPT = [
   "You analyze bathroom BEFORE + AFTER (mockup) images and return structured JSON when asked.",
   "There are two images in the user message. **IMAGE A is always the CURRENT MOCKUP (AFTER)** — the only source of truth for what the room already looks like after the redesign.",
   "**IMAGE B is the original BEFORE** — use it for pricing (what changed, labor/materials implied by the transformation) and for layout continuity. Do **not** let IMAGE B steer `improve_design` or `save_money` text: the homeowner is already looking at the result in A; never suggest “add X” if X is already clearly present in A.",
+  "**Style lock:** `save_money` and `improve_design` must preserve the **named renovation style** in the user message (human-readable title and subtitle). Offer cheaper or richer options **within that same aesthetic** — never steer toward a conflicting interior genre unless IMAGE A already mixes it in clearly.",
   "**improve_design (hard rule):** Each `text` must describe a **net-new or finer-tier** change a viewer would still want **after** studying IMAGE A alone. If you could point to A and say “it already looks like that,” the suggestion is invalid. Forbidden: repeating the style brief (spa/modern/luxury) as if A had not delivered it.",
   "**save_money:** Only trims/swaps/phasing that still make sense **given what A already shows**. Never propose undoing a finish that is already the hero of A.",
   "When JSON is requested, respond with **JSON only** (no markdown fences).",
@@ -909,6 +1255,9 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     beforeImageUrl: params.beforeImageUrl,
     afterImageUrl: params.afterImageUrl,
   });
+
+  const styleCfgForPrompt =
+    getBathroomStyleById(params.selectedStyle) ?? getBathroomStyleById("clean_refresh");
 
   const prompt = [
     "You are a senior remodeling estimator for U.S. homeowner bathroom work (typical metro contractor pricing — not design-magazine or coastal luxury unless IMAGE A clearly shows that tier).",
@@ -962,12 +1311,18 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     "- improve_design — NEVER suggest adding wall features into blocked zones. If IMAGE A shows a large mirror or fixture occupying the vanity wall, do not suggest backsplash/accent-wall/tile-band additions behind or above that occupied area unless your suggestion explicitly replaces that existing element first.",
     "- improve_design — Treat the wall behind sinks/vanity as potentially occupied by mirror/cabinet/lighting; default to NO available wall area there. Do not suggest additions 'behind sinks' unless replacement/demolition of existing elements is explicitly the suggestion.",
     "- save_money: Same discipline — propose trims or swaps that still make sense given what IMAGE A already established vs B; do not recommend undoing or replacing something that is already the cheaper path in A.",
+    "- **STYLE LOCK (mandatory):** All `save_money` and `improve_design` lines must match the **selected renovation style** named below (palette, fixture character, mood). Forbidden: genre pivots (e.g. farmhouse shiplap, industrial exposed pipe, cottage florals) when they conflict with that named style and are not already visible in IMAGE A.",
     params.userDescription.trim()
       ? "- User notes describe this analysis pass (e.g. a new tweak): if visible scope in A vs B changed, move dollars accordingly; save_money and improve_design must be freshly written for **this exact IMAGE A** (no canned lines; nothing already visible in A)."
       : "",
-    `Selected style: ${params.selectedStyle}`,
+    styleCfgForPrompt
+      ? [
+          `**Selected renovation style:** ${styleCfgForPrompt.name} — ${styleCfgForPrompt.subtitle} (id: ${params.selectedStyle}).`,
+          styleLockBlockForEstimate(styleCfgForPrompt),
+        ].join("\n")
+      : `Selected style: ${params.selectedStyle}`,
     params.userDescription.trim() ? `User notes: ${params.userDescription.trim()}` : "",
-    `Style marketing anchor only (NOT a minimum job size — many finish-only same-layout pairs should price BELOW this band): about $${params.styleDefaults.estimateRange.min}-$${params.styleDefaults.estimateRange.max} for a broad "${params.selectedStyle}" direction. If images show modest finish updates, your JSON totals should usually sit in the lower portion of that anchor or under it.`,
+    `Style marketing anchor only (NOT a minimum job size — many finish-only same-layout pairs should price BELOW this band): about $${params.styleDefaults.estimateRange.min}-$${params.styleDefaults.estimateRange.max} for a broad "${styleCfgForPrompt?.name ?? params.selectedStyle}" direction. If images show modest finish updates, your JSON totals should usually sit in the lower portion of that anchor or under it.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -1540,6 +1895,7 @@ export async function generateBathroomMockupAction(
       improveDesignSuggestions: TryTweakSuggestion[];
       mockupVersions: SignedTryMockupVersion[];
       activeMockupId: string;
+      estimateRefinementPending?: boolean;
     }
 > {
   const startNewProject = str(formData, "start_new_project") === "1";
@@ -1683,13 +2039,12 @@ export async function generateBathroomMockupAction(
     return { error: "Could not prepare image preview." };
   }
 
-  const beforeForVision = await beforeImageUrlForOpenAiVision(svc, beforePath, uploadedSigned.data?.signedUrl);
-
   const styleDefaults = defaultEstimateFromStyle(style);
 
   /** When rescue rerender is disabled, skip QA vision call to reduce latency. */
   const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
   if (allowRescue) {
+    const beforeForVision = await beforeImageUrlForOpenAiVision(svc, beforePath, uploadedSigned.data?.signedUrl);
     const qualityCheck = await evaluateBathroomResultQuality({
       beforeImageUrl: beforeForVision,
       afterImageUrl: generatedSigned.data.signedUrl,
@@ -1718,13 +2073,8 @@ export async function generateBathroomMockupAction(
     return { error: "Could not prepare generated image after quality check." };
   }
 
-  const estimateFromImages = await estimateBathroomCostsFromBeforeAfter({
-    beforeImageUrl: beforeForVision,
-    afterImageUrl: generatedSigned.data?.signedUrl ?? uploadedSigned.data.signedUrl,
-    selectedStyle: style.id,
-    userDescription,
-    styleDefaults,
-  });
+  const uploadedSignedUrl = uploadedSigned.data.signedUrl;
+  const generatedSignedUrl = generatedSigned.data.signedUrl;
 
   const generationId = randomUUID();
   await svc.from("bathroom_generations").insert({
@@ -1736,12 +2086,41 @@ export async function generateBathroomMockupAction(
     user_description: userDescription || null,
     uploaded_image_url: beforePath,
     generated_image_url: latest.storage_path,
-    estimate_min: estimateFromImages.estimateRange.min,
-    estimate_max: estimateFromImages.estimateRange.max,
+    estimate_min: styleDefaults.estimateRange.min,
+    estimate_max: styleDefaults.estimateRange.max,
+    try_estimate_snapshot: null,
     refinements_used: 0,
     selected_variation: null,
     lead_submitted: false,
     attribution: incomingAttribution,
+  });
+
+  const styleIdForAfter = style.id;
+  after(async () => {
+    try {
+      const svcInner = createServiceClient();
+      const styleCfg = getBathroomStyleById(styleIdForAfter) ?? getBathroomStyleById("clean_refresh");
+      if (!styleCfg) return;
+      const defaults = defaultEstimateFromStyle(styleCfg);
+      const est = await estimateBathroomCostsFromBeforeAfter({
+        beforeImageUrl: uploadedSignedUrl,
+        afterImageUrl: generatedSignedUrl,
+        selectedStyle: styleIdForAfter,
+        userDescription,
+        styleDefaults: defaults,
+      });
+      await svcInner
+        .from("bathroom_generations")
+        .update({
+          estimate_min: est.estimateRange.min,
+          estimate_max: est.estimateRange.max,
+          try_estimate_snapshot: tryEstimateSnapshotFromBreakdown(est),
+        })
+        .eq("id", generationId);
+      revalidatePath("/try");
+    } catch (e) {
+      console.error("[try] deferred homeowner estimate failed:", e);
+    }
   });
   if (process.env.NODE_ENV !== "production" && incomingAttribution) {
     console.log("[renovision][attribution][generation]", { generationId, projectId, attribution: incomingAttribution });
@@ -1784,16 +2163,17 @@ export async function generateBathroomMockupAction(
     styleName: style.name,
     uploadedImageUrl: uploadedSigned.data.signedUrl,
     generatedImageUrl: generatedSigned.data.signedUrl,
-    estimateRange: estimateFromImages.estimateRange,
-    breakdown: estimateFromImages.breakdown,
-    detailedBreakdown: estimateFromImages.detailedBreakdown,
-    reasoning: estimateFromImages.reasoning,
-    assumptions: estimateFromImages.assumptions,
-    confidence: estimateFromImages.confidence,
-    saveMoneySuggestions: estimateFromImages.saveMoneySuggestions,
-    improveDesignSuggestions: estimateFromImages.improveDesignSuggestions,
+    estimateRange: styleDefaults.estimateRange,
+    breakdown: styleDefaults.breakdown,
+    detailedBreakdown: styleDefaults.detailedBreakdown,
+    reasoning: styleDefaults.reasoning,
+    assumptions: styleDefaults.assumptions,
+    confidence: styleDefaults.confidence,
+    saveMoneySuggestions: styleDefaults.saveMoneySuggestions,
+    improveDesignSuggestions: styleDefaults.improveDesignSuggestions,
     mockupVersions,
     activeMockupId: activeMockupRow.id,
+    estimateRefinementPending: true,
   };
 }
 
@@ -2286,7 +2666,7 @@ export async function loadTryGenerationForViewer(params: {
   const { data: generation } = await svc
     .from("bathroom_generations")
     .select(
-      "id, project_id, selected_style, uploaded_image_url, generated_image_url, estimate_min, estimate_max",
+      "id, project_id, selected_style, uploaded_image_url, generated_image_url, estimate_min, estimate_max, try_estimate_snapshot",
     )
     .eq("id", generationId)
     .eq("project_id", projectId)
@@ -2321,6 +2701,10 @@ export async function loadTryGenerationForViewer(params: {
   const mockupVersions = await loadSignedMockupVersionsForProject(projectId, 60 * 60);
   const active = mockupVersions.at(-1);
 
+  const snapshot = parseTryEstimateSnapshotJson(
+    (generation as { try_estimate_snapshot?: unknown }).try_estimate_snapshot,
+  );
+
   return {
     generationId,
     projectId,
@@ -2328,20 +2712,56 @@ export async function loadTryGenerationForViewer(params: {
     styleName: style.name,
     uploadedImageUrl: beforeSigned.data.signedUrl,
     generatedImageUrl: afterSigned.data.signedUrl,
-    estimateRange: {
+    estimateRange: snapshot?.estimateRange ?? {
       min: clampMoney(generation.estimate_min, defaults.estimateRange.min),
       max: clampMoney(generation.estimate_max, defaults.estimateRange.max),
     },
-    breakdown: defaults.breakdown,
-    detailedBreakdown: defaults.detailedBreakdown,
-    reasoning: defaults.reasoning,
-    assumptions: defaults.assumptions,
-    confidence: defaults.confidence,
-    saveMoneySuggestions: defaults.saveMoneySuggestions,
-    improveDesignSuggestions: defaults.improveDesignSuggestions,
+    breakdown: snapshot?.breakdown ?? defaults.breakdown,
+    detailedBreakdown: snapshot?.detailedBreakdown ?? defaults.detailedBreakdown,
+    reasoning: snapshot?.reasoning ?? defaults.reasoning,
+    assumptions: snapshot?.assumptions ?? defaults.assumptions,
+    confidence: snapshot?.confidence ?? defaults.confidence,
+    saveMoneySuggestions: snapshot?.saveMoneySuggestions ?? defaults.saveMoneySuggestions,
+    improveDesignSuggestions: snapshot?.improveDesignSuggestions ?? defaults.improveDesignSuggestions,
     mockupVersions,
     activeMockupId: active?.id ?? "",
   };
+}
+
+export async function pollTryEstimateRefinementAction(
+  generationId: string,
+  projectId: string,
+): Promise<{ ready: false } | ({ ready: true } & TryEstimatePollFields)> {
+  const genId = String(generationId || "").trim();
+  const projId = String(projectId || "").trim();
+  if (!genId || !projId) return { ready: false };
+
+  const viewer = await getViewerContext(false);
+  const svc = createServiceClient();
+  const { data: generation } = await svc
+    .from("bathroom_generations")
+    .select("project_id, try_estimate_snapshot")
+    .eq("id", genId)
+    .maybeSingle();
+  if (!generation || String(generation.project_id) !== projId) return { ready: false };
+
+  const { data: project } = await svc
+    .from("homeowner_try_projects")
+    .select("user_id, anonymous_session_id")
+    .eq("id", projId)
+    .maybeSingle();
+  if (!project) return { ready: false };
+
+  const canView =
+    (viewer.userId && (project.user_id === viewer.userId || project.user_id == null)) ||
+    (!viewer.userId && viewer.anonymousSessionId && project.anonymous_session_id === viewer.anonymousSessionId);
+  if (!canView) return { ready: false };
+
+  const parsed = parseTryEstimateSnapshotJson(
+    (generation as { try_estimate_snapshot?: unknown }).try_estimate_snapshot,
+  );
+  if (!parsed) return { ready: false };
+  return { ready: true, ...parsed };
 }
 
 export async function loadLatestTryGenerationForViewer(): Promise<TryGenerationViewState | null> {
@@ -2538,7 +2958,9 @@ export async function submitBathroomLeadAction(
   const name = [firstName, lastName].filter(Boolean).join(" ").slice(0, 120);
   const email = str(formData, "email").slice(0, 180);
   const phone = str(formData, "phone").slice(0, 40);
-  const zipCode = str(formData, "zip_code").slice(0, 20);
+  const zipRaw = str(formData, "zip_code").slice(0, 20);
+  const zipCode = normalizeUsZipCode(zipRaw);
+  const streetAddress = str(formData, "street_address").slice(0, 500);
   const timeline = str(formData, "timeline").slice(0, 60);
   const budgetRange = str(formData, "budget_range").slice(0, 60);
   const preferredContactMethod = str(formData, "preferred_contact_method").slice(0, 40);
@@ -2561,7 +2983,10 @@ export async function submitBathroomLeadAction(
   const estimateAssumptions = safeJson("estimate_assumptions_json");
 
   if (!generationId || !selectedStyle) return { error: "Missing generation details." };
-  if (!firstName || !email || !phone || !zipCode || !timeline || !budgetRange || !preferredContactMethod) {
+  if (!zipCode) {
+    return { error: "Please enter a valid US ZIP code (5 digits, or ZIP+4)." };
+  }
+  if (!firstName || !email || !phone || !timeline || !budgetRange || !preferredContactMethod) {
     return { error: "Please complete all required fields." };
   }
 
@@ -2576,6 +3001,7 @@ export async function submitBathroomLeadAction(
     name,
     email,
     phone,
+    street_address: streetAddress || null,
     zip_code: zipCode,
     timeline,
     budget_range: budgetRange,

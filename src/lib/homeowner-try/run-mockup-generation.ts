@@ -7,6 +7,7 @@ import {
   bufferToArrayBuffer,
   bufferToDataUrl,
   normalizeImageBufferForDisplay,
+  resizeBufferForMockupModelIfLarge,
   resizeBufferForOpenAiVisionIfLarge,
 } from "@/lib/images/normalize-image-exif";
 import type { BidMaterialLine } from "@/types/bid";
@@ -494,6 +495,13 @@ export async function runHomeownerTryMockupGeneration(params: {
       editPromptOpenAi = `${editPromptOpenAi}\n\n${LUXURY_ESCAPE_OPENAI_MIRROR_REFLECTION_ANALYSIS}`;
     }
 
+    {
+      const buf = Buffer.from(new Uint8Array(imageBytes));
+      const resized = await resizeBufferForMockupModelIfLarge(buf, contentType);
+      imageBytes = bufferToArrayBuffer(resized.buffer);
+      contentType = resized.contentType;
+    }
+
     let editPromptVertex =
       params.selectedStyle === "spa_retreat"
         ? buildVertexSpaRetreatTryImageEditPrompt({
@@ -722,6 +730,12 @@ export async function runHomeownerTryMockupGeneration(params: {
     const openAiComparePrompt =
       mockupImageProvider === "openai" ? editPromptOpenAi : editPromptVertex;
 
+    if (params.forceOpenAiComparison && params.requireVertex) {
+      throw new Error(
+        "Homeowner previews use Vertex only for mockup images. OpenAI comparison mode is not available on /try.",
+      );
+    }
+
     if (params.forceOpenAiComparison) {
       try {
         png = await runOpenAiImageEdit(openAiComparePrompt);
@@ -746,55 +760,14 @@ export async function runHomeownerTryMockupGeneration(params: {
         if (params.requireVertex) {
           handledRequireVertex = true;
           if (isVertexGoogleUserAuthFailureMessage(vMsg)) {
-            if (isOpenAiFallbackOnVertexAuthErrorEnabled()) {
-              console.warn(
-                "[mockup] Vertex RAPT/auth error (homeowner try) — falling back to OpenAI image edit (MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK policy).",
-              );
-              try {
-                png = await runOpenAiImageEdit(
-                  OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi,
-                );
-                usedMockupProvider = "openai";
-                resolvedImageEditPrompt =
-                  OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi;
-              } catch (openAiErr) {
-                const oMsg = openAiErr instanceof Error ? openAiErr.message : String(openAiErr);
-                throw new Error(
-                  [
-                    "Vertex user credentials failed (invalid_rapt / invalid_grant) and OpenAI fallback failed:",
-                    oMsg.slice(0, 200),
-                    "Fix Vertex: run `gcloud auth application-default login` (full browser flow), restart `next dev`, or set GOOGLE_APPLICATION_CREDENTIALS to a service account JSON if your org allows keys.",
-                    "User ADC often hits RAPT again under Google Workspace — a service account avoids that. Dev-only: MOCKUP_IMAGE_PROVIDER=openai skips Vertex for mockups.",
-                  ].join(" "),
-                );
-              }
-            } else {
-              throw new Error(
-                [
-                  "Vertex user credentials failed (invalid_rapt / invalid_grant).",
-                  "Run `gcloud auth application-default login` (browser login), then restart your dev server. Some gcloud builds do not support `--update-adc` on this command — the plain login refreshes ADC.",
-                  "To stop this from recurring: use GOOGLE_APPLICATION_CREDENTIALS with a dedicated service account (Vertex AI User on the project) instead of your personal Google login.",
-                  "Optional: set MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK=1 plus OPENAI_API_KEY so /try can continue with OpenAI when Vertex auth fails, or MOCKUP_IMAGE_PROVIDER=openai to skip Vertex in local dev.",
-                ].join(" "),
-              );
-            }
-          } else if (isVertexResourceExhaustedMessage(vMsg) && isOpenAiFallbackOnVertexQuotaEnabled()) {
-            console.warn(
-              "[mockup] Vertex quota / rate limit (429) (homeowner try) — falling back to OpenAI image edit.",
+            throw new Error(
+              [
+                "Vertex user credentials failed (invalid_rapt / invalid_grant).",
+                "Run `gcloud auth application-default login` (browser login), then restart your dev server. Some gcloud builds do not support `--update-adc` on this command — the plain login refreshes ADC.",
+                "To stop this from recurring: use GOOGLE_APPLICATION_CREDENTIALS with a dedicated service account (Vertex AI User on the project) instead of your personal Google login.",
+                "Renovision homeowner previews use Vertex only for mockup images — OpenAI is not used as a fallback here.",
+              ].join(" "),
             );
-            try {
-              png = await runOpenAiImageEdit(
-                OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi,
-              );
-              usedMockupProvider = "openai";
-              resolvedImageEditPrompt =
-                OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi;
-            } catch (openAiErr) {
-              const oMsg = openAiErr instanceof Error ? openAiErr.message : String(openAiErr);
-              throw new Error(
-                `Vertex hit quota/rate limits (429) and OpenAI fallback failed: ${oMsg.slice(0, 220)}. Original: ${vMsg.slice(0, 180)}`,
-              );
-            }
           } else if (isVertexResourceExhaustedMessage(vMsg)) {
             throw new Error(
               [
@@ -803,29 +776,12 @@ export async function runHomeownerTryMockupGeneration(params: {
                 "Your project and settings are saved — you won’t lose progress.",
               ].join(" "),
             );
-          } else if (isVertexMockupTimeoutMessage(vMsg) && isOpenAiFallbackOnVertexTimeoutEnabled()) {
-            console.warn(
-              "[mockup] Vertex wall-clock timeout (homeowner try) — falling back to OpenAI image edit.",
-            );
-            try {
-              png = await runOpenAiImageEdit(
-                OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi,
-              );
-              usedMockupProvider = "openai";
-              resolvedImageEditPrompt =
-                OPENAI_MOCKUP_FALLBACK_NO_REF_PIXELS_PREFIX + editPromptOpenAi;
-            } catch (openAiErr) {
-              const oMsg = openAiErr instanceof Error ? openAiErr.message : String(openAiErr);
-              throw new Error(
-                `Vertex timed out and OpenAI fallback failed: ${oMsg.slice(0, 220)}. Original: ${vMsg.slice(0, 180)}`,
-              );
-            }
           } else if (isVertexMockupTimeoutMessage(vMsg)) {
             throw new Error(
               [
                 "Vertex mockup image request timed out before returning a picture.",
-                "Try the tweak again, set VERTEX_MOCKUP_REQUEST_TIMEOUT_MS=600000 for a longer wait,",
-                "or set MOCKUP_VERTEX_TIMEOUT_OPENAI_FALLBACK=1 (with OPENAI_API_KEY) to allow an OpenAI edit when Vertex is slow.",
+                "Try again, or set VERTEX_MOCKUP_REQUEST_TIMEOUT_MS=600000 for a longer wait.",
+                "Homeowner previews use Vertex only for mockup images (no OpenAI fallback).",
                 `Detail: ${vMsg.slice(0, 220)}`,
               ].join(" "),
             );

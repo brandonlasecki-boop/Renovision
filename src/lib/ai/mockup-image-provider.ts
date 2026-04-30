@@ -5,19 +5,16 @@
  * summaries) still use OpenAI. With `MOCKUP_IMAGE_PROVIDER=openai`, a rare **OpenAI DALL·E “concept fallback”**
  * runs only if **`gpt-image-1` image edit** fails.
  *
- * **Vertex auth (RAPT / `invalid_grant`):** refresh ADC (`gcloud auth application-default login`, then restart the app)
- * or use a **service account** (`GOOGLE_APPLICATION_CREDENTIALS`). When `MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK`
- * is **unset** and `NODE_ENV !== "production"`, mockups **automatically** retry with OpenAI image edit after
- * that class of user-credential error (local `next dev`). In **production**, set `MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK=1`
- * to enable the same retry, or `=0` in non-production to disable. To skip Vertex entirely, use `MOCKUP_IMAGE_PROVIDER=openai`.
+ * **Homeowner `/try`:** mockup **images** are **Vertex-only** — OpenAI image edit / DALL·E fallbacks are not used,
+ * even if `MOCKUP_VERTEX_*_OPENAI_FALLBACK` is set. Fix credentials, quota, or timeouts on the Vertex side.
  *
- * **Vertex slow / wall-clock timeout:** `/try` tweaks require Vertex first; if the image call hits the
- * request deadline, set `MOCKUP_VERTEX_TIMEOUT_OPENAI_FALLBACK=1` (plus `OPENAI_API_KEY`) to retry that run
- * with OpenAI image edit — same default-on-in-non-production pattern as `MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK`.
+ * **Contractor bid mockups — Vertex auth (RAPT / `invalid_grant`):** refresh ADC or use a service account.
+ * When `MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK` is **unset** and `NODE_ENV !== "production"`, bid mockups may retry
+ * with OpenAI image edit after that error. In **production**, set the env to `1` / `0` explicitly. To skip Vertex
+ * entirely for bids, use `MOCKUP_IMAGE_PROVIDER=openai`.
  *
- * **Vertex quota / rate limit (HTTP 429, `RESOURCE_EXHAUSTED`):** Google caps requests per minute/day for
- * `gemini-3.1-flash-image-preview`. Set `MOCKUP_VERTEX_QUOTA_OPENAI_FALLBACK=1` plus `OPENAI_API_KEY` to retry
- * with OpenAI when Vertex returns 429 (unset → allowed in non-production, same tri-state as the timeout flag).
+ * **Bid mockups — Vertex timeout / quota:** `MOCKUP_VERTEX_TIMEOUT_OPENAI_FALLBACK` and `MOCKUP_VERTEX_QUOTA_OPENAI_FALLBACK`
+ * (plus `OPENAI_API_KEY`) can retry with OpenAI on slow Vertex or HTTP 429 — **not** used on homeowner `/try`.
  *
  * Env:
  * - `MOCKUP_IMAGE_PROVIDER` — Default / `auto` / `vertex`: mockup **room edits** require Vertex

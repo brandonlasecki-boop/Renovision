@@ -46,6 +46,7 @@ export default async function AdminContractorLeadDetailPage({
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <EstimateChip label="Email" value={detail.email} />
         <EstimateChip label="Phone" value={detail.phone} />
+        <EstimateChip label="Street address" value={detail.streetAddress || "—"} />
         <EstimateChip label="ZIP" value={detail.zipCode} />
         <EstimateChip label="Timeline" value={detail.timeline} />
         <EstimateChip label="Budget range" value={detail.budgetRange} />

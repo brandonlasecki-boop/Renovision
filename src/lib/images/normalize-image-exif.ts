@@ -17,10 +17,8 @@ function fallbackContentType(mime: string): NormalizedImageBytes["contentType"] 
  * Applies EXIF Orientation (and similar) so pixel data matches how viewers show the image.
  * Output is re-encoded without orientation metadata so downstream models are not confused.
  */
-/**
- * Longest edge cap for OpenAI **vision** (layout/materials) — large phone photos are downscaled so
- * analysis returns faster. Mockup **image generation** should keep full-res input (separate path).
- */
+
+/** Longest edge cap for OpenAI **vision** (layout/materials) on `/try`. */
 const OPENAI_VISION_MAX_EDGE_PX = 1536;
 
 /**
@@ -28,6 +26,44 @@ const OPENAI_VISION_MAX_EDGE_PX = 1536;
  * JPEG. Used for `fetchMaterialsAndSummaryFromOpenAI` on `/try` so multi‑MP uploads do not slow the
  * first vision call. No-op when already small enough.
  */
+/**
+ * Longest edge for **mockup image models** (Vertex / OpenAI edit). Smaller than full phone resolution
+ * cuts latency on multi‑MP uploads; stored originals stay full‑res in Supabase.
+ * Override: `TRY_MOCKUP_MODEL_MAX_EDGE_PX` (1024–4096, default 1536). Raise if previews look soft.
+ */
+function mockupModelMaxEdgePx(): number {
+  const raw = process.env.TRY_MOCKUP_MODEL_MAX_EDGE_PX?.trim();
+  const n = raw ? Number(raw) : NaN;
+  if (Number.isFinite(n)) return Math.min(4096, Math.max(1024, Math.floor(n)));
+  return 1536;
+}
+
+export async function resizeBufferForMockupModelIfLarge(
+  input: Buffer,
+  fallbackMime = "image/jpeg",
+  maxEdgePx = mockupModelMaxEdgePx(),
+): Promise<NormalizedImageBytes> {
+  const norm = await normalizeImageBufferForDisplay(input, fallbackMime);
+  try {
+    const meta = await sharp(norm.buffer, { failOn: "none" }).metadata();
+    const w = meta.width ?? 0;
+    const h = meta.height ?? 0;
+    const longEdge = Math.max(w, h);
+    if (longEdge <= maxEdgePx || longEdge === 0) {
+      return norm;
+    }
+    const jpegBuf = await sharp(norm.buffer, { failOn: "none" })
+      .rotate()
+      .resize(maxEdgePx, maxEdgePx, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 90, mozjpeg: true })
+      .toBuffer();
+    return { buffer: jpegBuf, contentType: "image/jpeg" };
+  } catch (err) {
+    console.warn("[resize-for-mockup-model] sharp failed; using full normalized image:", err);
+    return norm;
+  }
+}
+
 export async function resizeBufferForOpenAiVisionIfLarge(
   input: Buffer,
   fallbackMime = "image/jpeg",

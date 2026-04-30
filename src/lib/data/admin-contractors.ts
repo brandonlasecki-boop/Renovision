@@ -22,6 +22,7 @@ export type AdminContractorLeadListRow = {
   fullName: string;
   email: string;
   phone: string;
+  streetAddress: string;
   zipCode: string;
   timeline: string;
   budgetRange: string;
@@ -42,6 +43,7 @@ export type AdminContractorLeadDetail = {
   fullName: string;
   email: string;
   phone: string;
+  streetAddress: string;
   zipCode: string;
   timeline: string;
   budgetRange: string;
@@ -116,7 +118,7 @@ export async function fetchAdminContractorLeads(search: string): Promise<AdminCo
   const { data: leads, error } = await svc
     .from("leads")
     .select(
-      "id, created_at, first_name, last_name, name, email, phone, zip_code, timeline, budget_range, preferred_contact_method, best_contact_time, selected_style, estimate_min, estimate_max, generation_id",
+      "id, created_at, first_name, last_name, name, email, phone, street_address, zip_code, timeline, budget_range, preferred_contact_method, best_contact_time, selected_style, estimate_min, estimate_max, generation_id",
     )
     .order("created_at", { ascending: false })
     .limit(1000);
@@ -145,6 +147,7 @@ export async function fetchAdminContractorLeads(search: string): Promise<AdminCo
       fullName,
       email: asText(l.email),
       phone: asText(l.phone),
+      streetAddress: asText(l.street_address),
       zipCode: asText(l.zip_code),
       timeline: asText(l.timeline),
       budgetRange: asText(l.budget_range),
@@ -168,6 +171,7 @@ export async function fetchAdminContractorLeads(search: string): Promise<AdminCo
       r.fullName,
       r.email,
       r.phone,
+      r.streetAddress,
       r.zipCode,
       r.projectId ?? "",
       r.generationId ?? "",
@@ -186,7 +190,7 @@ export async function fetchAdminContractorLeadDetail(leadId: string): Promise<Ad
   const { data: lead, error } = await svc
     .from("leads")
     .select(
-      "id, created_at, generation_id, first_name, last_name, name, email, phone, zip_code, timeline, budget_range, preferred_contact_method, best_contact_time, project_notes, selected_style, estimate_min, estimate_max, estimate_breakdown, estimate_detailed_breakdown, estimate_reasoning, estimate_assumptions, estimate_confidence",
+      "id, created_at, generation_id, first_name, last_name, name, email, phone, street_address, zip_code, timeline, budget_range, preferred_contact_method, best_contact_time, project_notes, selected_style, estimate_min, estimate_max, estimate_breakdown, estimate_detailed_breakdown, estimate_reasoning, estimate_assumptions, estimate_confidence",
     )
     .eq("id", id)
     .maybeSingle();
@@ -249,6 +253,7 @@ export async function fetchAdminContractorLeadDetail(leadId: string): Promise<Ad
     fullName,
     email: asText(lead.email),
     phone: asText(lead.phone),
+    streetAddress: asText(lead.street_address),
     zipCode: asText(lead.zip_code),
     timeline: asText(lead.timeline),
     budgetRange: asText(lead.budget_range),
