@@ -741,7 +741,7 @@ async function detectVisibleScopeDiffSignals(params: {
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(20_000),
       headers: {
         Authorization: `Bearer ${params.apiKey}`,
         "Content-Type": "application/json",
@@ -761,8 +761,8 @@ async function detectVisibleScopeDiffSignals(params: {
             role: "user",
             content: [
               { type: "text", text: "IMAGE A = latest mockup (after). IMAGE B = original before." },
-              { type: "image_url", image_url: { url: params.afterImageUrl, detail: "high" } },
-              { type: "image_url", image_url: { url: params.beforeImageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: params.afterImageUrl, detail: "low" } },
+              { type: "image_url", image_url: { url: params.beforeImageUrl, detail: "low" } },
               {
                 type: "text",
                 text:
@@ -1682,20 +1682,29 @@ export async function generateBathroomMockupAction(
     wetZoneRemodelIntent: initialWetZoneIntent,
   });
   if (!qualityCheck.pass) {
-    await runHomeownerTryMockupGeneration({
-      projectId,
-      selectedStyle: style.id,
-      additionalPrompt: `${initialTryPrompt}\n\n${initialWetZoneIntent ? QUALITY_RESCUE_PROMPT_WET_ZONE : QUALITY_RESCUE_PROMPT}`,
-      regenerateFromRoom: true,
-      refineFromMockupId: null,
-      requireVertex: true,
-      wetZoneRemodelIntent: initialWetZoneIntent,
-    });
-    const rerunMockups = await listMockupsForHomeownerProject(projectId);
-    const rerunLatest = [...rerunMockups].sort((a, b) => b.mockup_generation - a.mockup_generation)[0];
-    if (rerunLatest?.storage_path && rerunLatest.id) {
-      generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(rerunLatest.storage_path, 60 * 60);
-      latest = rerunLatest;
+    /** Optional second full render after QA failure. Kept opt-in to avoid doubling latency in normal flow. */
+    const allowRescue = process.env.TRY_QA_RESCUE_REGEN?.trim() === "1";
+    if (allowRescue) {
+      await runHomeownerTryMockupGeneration({
+        projectId,
+        selectedStyle: style.id,
+        additionalPrompt: `${initialTryPrompt}\n\n${initialWetZoneIntent ? QUALITY_RESCUE_PROMPT_WET_ZONE : QUALITY_RESCUE_PROMPT}`,
+        regenerateFromRoom: true,
+        refineFromMockupId: null,
+        requireVertex: true,
+        wetZoneRemodelIntent: initialWetZoneIntent,
+      });
+      const rerunMockups = await listMockupsForHomeownerProject(projectId);
+      const rerunLatest = [...rerunMockups].sort((a, b) => b.mockup_generation - a.mockup_generation)[0];
+      if (rerunLatest?.storage_path && rerunLatest.id) {
+        generatedSigned = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(rerunLatest.storage_path, 60 * 60);
+        latest = rerunLatest;
+      }
+    } else {
+      console.warn(
+        "[try] QA gate did not pass on initial render; keeping first render (no automatic rescue). Issues:",
+        qualityCheck.issues,
+      );
     }
   }
   if (!generatedSigned.data?.signedUrl) {
