@@ -51,6 +51,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
       <div
         ref={trackRef}
         className="relative aspect-[3/4] min-h-[30rem] w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-0"
+        onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
       >
         <Image
           src={afterUrl}
@@ -90,7 +91,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         <div className="pointer-events-none absolute bottom-2 right-3 z-20 rounded bg-black/55 px-2 py-1 text-xs font-medium text-white">
           After
         </div>
-        {/* Drag on image (mouse + touch); pointer capture keeps tracking past finger wobble */}
+        {/* Tap the image to open fullscreen and drag to compare. */}
         <div
           className="absolute inset-0 z-30 cursor-ew-resize touch-none select-none"
           style={{ touchAction: "none" }}
@@ -98,6 +99,9 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUpOrCancel}
           onPointerCancel={onPointerUpOrCancel}
+          onClick={() =>
+            setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })
+          }
           aria-hidden
         />
       </div>
@@ -113,49 +117,6 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           aria-label="Slide to compare before and after"
         />
         <span className="text-xs text-muted-foreground">After</span>
-      </div>
-      {/* Keep previews visible on phones so users always see full before/after below the slider. */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        <button
-          type="button"
-          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
-          onClick={() => setFullscreenImage({ src: beforeUrl, label: "Before" })}
-          aria-label="Open before image fullscreen"
-        >
-          <Image
-            src={beforeUrl}
-            alt="Before — full preview"
-            fill
-            className="object-contain"
-            sizes="(max-width: 1024px) 42vw, 400px"
-            quality={70}
-            loading="lazy"
-            draggable={false}
-          />
-          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
-            Before
-          </span>
-        </button>
-        <button
-          type="button"
-          className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm"
-          onClick={() => setFullscreenImage({ src: afterUrl, label: "After" })}
-          aria-label="Open after image fullscreen"
-        >
-          <Image
-            src={afterUrl}
-            alt="After — full preview"
-            fill
-            className="object-contain"
-            sizes="(max-width: 1024px) 42vw, 400px"
-            quality={70}
-            loading="lazy"
-            draggable={false}
-          />
-          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
-            After
-          </span>
-        </button>
       </div>
       {fullscreenImage ? (
         <div
