@@ -522,6 +522,11 @@ type BathroomEstimateBreakdown = {
   improveDesignSuggestions: TryTweakSuggestion[];
 };
 
+type VisibleScopeDiffSignals = {
+  mirrorChanged: boolean;
+  doorOrWindowChanged: boolean;
+};
+
 const TRY_DELTA_ABS_CAP = 25_000;
 
 function clampDeltaPair(deltaMin: number, deltaMax: number, savings: boolean): { deltaMin: number; deltaMax: number } {
@@ -704,6 +709,84 @@ function clampMoney(value: unknown, fallback: number): number {
   return Math.max(0, Math.round(n));
 }
 
+function textMentionsMirrorWork(text: string): boolean {
+  const t = text.toLowerCase();
+  return /(mirror|medicine cabinet|vanity light|sconce)/.test(t);
+}
+
+function hasBreakdownTopic(
+  rows: Array<{ category: string; reason: string }>,
+  pattern: RegExp,
+): boolean {
+  return rows.some((row) => pattern.test(`${row.category} ${row.reason}`.toLowerCase()));
+}
+
+function estimateLineRangeFromTotalBand(
+  totalMin: number,
+  totalMax: number,
+  pctMin: number,
+  pctMax: number,
+  hardFloor: number,
+): { min: number; max: number } {
+  const min = Math.max(hardFloor, Math.round(totalMin * pctMin));
+  const max = Math.max(min, Math.round(totalMax * pctMax));
+  return { min, max };
+}
+
+async function detectVisibleScopeDiffSignals(params: {
+  apiKey: string;
+  beforeImageUrl: string;
+  afterImageUrl: string;
+}): Promise<VisibleScopeDiffSignals | null> {
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      signal: AbortSignal.timeout(45_000),
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 220,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Compare two bathroom images and return strict JSON only. Detect visible change signals conservatively.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "IMAGE A = latest mockup (after). IMAGE B = original before." },
+              { type: "image_url", image_url: { url: params.afterImageUrl, detail: "high" } },
+              { type: "image_url", image_url: { url: params.beforeImageUrl, detail: "high" } },
+              {
+                type: "text",
+                text:
+                  'Return JSON: {"mirror_changed": boolean, "door_or_window_changed": boolean}. Use true only if clearly visible differences exist.',
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = data.choices?.[0]?.message?.content?.trim() ?? "";
+    const parsed = parseJsonObject(raw);
+    if (!parsed) return null;
+    return {
+      mirrorChanged: Boolean(parsed.mirror_changed),
+      doorOrWindowChanged: Boolean(parsed.door_or_window_changed),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function defaultEstimateFromStyle(style: {
   estimateMin: number;
   estimateMax: number;
@@ -864,6 +947,7 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     "- Delta bands should be plausible vs your estimate_min/estimate_max (same order of magnitude as the job, not six-figure swings for paint-only tweaks).",
     "- improve_design — **mandatory mental pass before JSON**: (1) Silently inventory what IMAGE A already shows (tile, metals, glass, vanity, lighting, paint, niche, fixtures, decor). (2) Your four lines must each target a gap, weakness, or finer tier **in A** — not a headline upgrade already prominent in A. (3) If you cannot find four distinct ideas, use **smaller** refinements (mirror size/shape, hardware cohesion, grout/contrast, shelf/styling, fan grille, switch/dimmer tier, towel storage) that A plausibly does not yet emphasize.",
     "- improve_design — **forbidden violations** (treat as hard errors to avoid): suggesting a finish or fixture style that already matches IMAGE A; generic style language that ignores what A already changed from B.",
+    "- CONSISTENCY CHECK (required before JSON): if IMAGE A still shows the same mirror footprint/style as IMAGE B, do not include mirror replacement/refinishing cost lines. Only include mirror-related dollars when a visible mirror change is clearly present in A vs B.",
     "- improve_design — NEVER propose enlarging/resizing fixtures (e.g., bigger mirror, wider vanity, larger shower) unless IMAGE A clearly shows that element as undersized/problematic. Prefer finish/material/lighting/accessory refinements over size changes.",
     "- improve_design — NEVER suggest adding wall features into blocked zones. If IMAGE A shows a large mirror or fixture occupying the vanity wall, do not suggest backsplash/accent-wall/tile-band additions behind or above that occupied area unless your suggestion explicitly replaces that existing element first.",
     "- improve_design — Treat the wall behind sinks/vanity as potentially occupied by mirror/cabinet/lighting; default to NO available wall area there. Do not suggest additions 'behind sinks' unless replacement/demolition of existing elements is explicitly the suggestion.",
@@ -997,6 +1081,52 @@ async function estimateBathroomCostsFromBeforeAfter(params: {
     })
     .filter((x): x is NonNullable<typeof x> => x != null)
     .slice(0, 8);
+
+  // If this run does not explicitly request mirror work, hide mirror-specific line items to avoid
+  // presenting costs that aren't clearly tied to requested / visible deltas.
+  if (!textMentionsMirrorWork(userNotesForEstimate)) {
+    out.detailedBreakdown = out.detailedBreakdown.filter((row) => {
+      const combined = `${row.category} ${row.reason}`.toLowerCase();
+      return !/(mirror|medicine cabinet)/.test(combined);
+    });
+  }
+
+  const visibleSignals = await detectVisibleScopeDiffSignals({
+    apiKey,
+    beforeImageUrl: params.beforeImageUrl,
+    afterImageUrl: params.afterImageUrl,
+  });
+
+  if (visibleSignals?.doorOrWindowChanged) {
+    const hasDoorWindowLine = hasBreakdownTopic(
+      out.detailedBreakdown,
+      /(door|window|trim|opening|frame|casing)/,
+    );
+    if (!hasDoorWindowLine) {
+      const r = estimateLineRangeFromTotalBand(
+        out.estimateRange.min,
+        out.estimateRange.max,
+        0.04,
+        0.11,
+        180,
+      );
+      out.detailedBreakdown.push({
+        category: "Door / window / trim updates",
+        min: r.min,
+        max: r.max,
+        reason:
+          "After-vs-before image comparison indicates visible door/window or adjacent trim differences that require material and labor allowance.",
+      });
+    }
+  }
+
+  if (visibleSignals && !visibleSignals.mirrorChanged && !textMentionsMirrorWork(userNotesForEstimate)) {
+    out.detailedBreakdown = out.detailedBreakdown.filter((row) => {
+      const combined = `${row.category} ${row.reason}`.toLowerCase();
+      return !/(mirror|medicine cabinet)/.test(combined);
+    });
+  }
+
   if (out.detailedBreakdown.length === 0) {
     out.detailedBreakdown = params.styleDefaults.detailedBreakdown;
   }

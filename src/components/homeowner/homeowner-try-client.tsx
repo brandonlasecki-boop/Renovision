@@ -1097,21 +1097,22 @@ export function HomeownerTryClient({
               </details>
             </div>
 
-            <div className="rounded-2xl border border-renovision-navy/20 bg-background p-4 shadow-lg">
-              <p className="text-lg font-semibold">Like this direction? We can help you explore next steps.</p>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <form action={connectAction} className="w-full sm:w-auto">
+            <div className="rounded-2xl border border-renovision-navy/20 bg-gradient-to-b from-background to-renovision-navy-muted/25 p-4 shadow-lg sm:p-5">
+              <p className="text-lg font-semibold">Like this direction? Pick what to do next.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Quick actions</p>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <form action={connectAction} className="w-full">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
                   <input type="hidden" name="attribution_json" value={attributionJson} />
-                  <Button type="submit" className="w-full rounded-xl sm:w-auto">
+                  <Button type="submit" className="h-11 w-full rounded-xl text-sm font-semibold">
                     Connect Me With a Remodeler
                   </Button>
                 </form>
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full rounded-xl sm:w-auto"
+                  className="h-11 w-full rounded-xl text-sm font-semibold"
                   onClick={() => {
                     setQuickStyleSwitchMode(true);
                     setStep("style");
@@ -1122,7 +1123,7 @@ export function HomeownerTryClient({
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full rounded-xl sm:w-auto"
+                  className="h-11 w-full rounded-xl text-sm font-semibold"
                   onClick={() => {
                     setGeneration(null);
                     setSelectedStyle(null);
@@ -1137,8 +1138,10 @@ export function HomeownerTryClient({
                   Start New Project
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">Sign in to keep your project history and versions.</p>
-              <p className="mt-2 text-xs text-muted-foreground">No contractor contact unless you request it.</p>
+              <div className="mt-3 space-y-1">
+                <p className="text-xs text-muted-foreground">Sign in to keep your project history and versions.</p>
+                <p className="text-xs text-muted-foreground">No contractor contact unless you request it.</p>
+              </div>
             </div>
           </section>
         ) : null}

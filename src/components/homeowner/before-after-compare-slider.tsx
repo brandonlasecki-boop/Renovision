@@ -111,8 +111,8 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         />
         <span className="text-xs text-muted-foreground">After</span>
       </div>
-      {/* Extra previews are useful context on larger screens, but skipping them on phones avoids extra image decodes. */}
-      <div className="hidden grid-cols-2 gap-2 sm:grid sm:gap-3">
+      {/* Keep previews visible on phones so users always see full before/after below the slider. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
         <figure className="relative m-0 aspect-[4/3] w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted shadow-sm">
           <Image
             src={beforeUrl}

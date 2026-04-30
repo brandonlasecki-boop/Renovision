@@ -612,6 +612,51 @@ export async function runHomeownerTryMockupGeneration(params: {
       });
     }
 
+    /**
+     * Vertex can return transient 429 RESOURCE_EXHAUSTED during bursts.
+     * Retry a few times with exponential backoff before surfacing failure.
+     */
+    async function runVertexImageEditWithQuotaRetry(): Promise<ArrayBuffer> {
+      const triesRaw = Number(process.env.TRY_VERTEX_QUOTA_RETRY_ATTEMPTS ?? "");
+      const maxAttempts = Number.isFinite(triesRaw)
+        ? Math.max(1, Math.min(6, Math.floor(triesRaw)))
+        : 5;
+      const baseMsRaw = Number(process.env.TRY_VERTEX_QUOTA_RETRY_BASE_MS ?? "");
+      const baseMs = Number.isFinite(baseMsRaw)
+        ? Math.max(500, Math.min(8_000, Math.floor(baseMsRaw)))
+        : 3_000;
+
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          return await fetchRoomRemodelImageEditVertexGemini({
+            imageBytes,
+            contentType,
+            editPrompt: editPromptVertex,
+            projectId: googleCloudProjectId(),
+            location: vertexLocation(),
+            model: vertexGeminiImageModel(),
+            homeownerMockupTweak: !params.regenerateFromRoom,
+          });
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          const isQuota = isVertexResourceExhaustedMessage(msg);
+          if (!isQuota || attempt >= maxAttempts) break;
+          const waitMs = Math.min(
+            20_000,
+            baseMs * 2 ** (attempt - 1) + Math.floor(Math.random() * 400),
+          );
+          console.warn(
+            `[mockup] Vertex quota retry ${attempt}/${maxAttempts} (waiting ${waitMs}ms):`,
+            msg.slice(0, 220),
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+        }
+      }
+      throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "Vertex failed"));
+    }
+
     async function applyOpenAiConceptFallbackAfterPhotoEditFailed(): Promise<void> {
       const quoteBits = formatQuoteLinesForImageEdit(quoteForMockupImage);
       const strictRemodel = buildStrictRemodelEditPrompt({
@@ -688,15 +733,7 @@ export async function runHomeownerTryMockupGeneration(params: {
       }
     } else if (mockupImageProvider === "vertex_gemini") {
       try {
-        png = await fetchRoomRemodelImageEditVertexGemini({
-          imageBytes,
-          contentType,
-          editPrompt: editPromptVertex,
-          projectId: googleCloudProjectId(),
-          location: vertexLocation(),
-          model: vertexGeminiImageModel(),
-          homeownerMockupTweak: !params.regenerateFromRoom,
-        });
+        png = await runVertexImageEditWithQuotaRetry();
         usedMockupProvider = "vertex_gemini";
         resolvedImageEditPrompt = editPromptVertex;
       } catch (vertexErr) {
@@ -759,8 +796,8 @@ export async function runHomeownerTryMockupGeneration(params: {
           } else if (isVertexResourceExhaustedMessage(vMsg)) {
             throw new Error(
               [
-                "We’re getting a lot of image requests right now and couldn’t generate your preview.",
-                "Please wait a minute and try again.",
+                "We couldn’t generate this preview right now because the image service is temporarily throttling requests for this project.",
+                "We already retried automatically; please try again in about 1–2 minutes.",
                 "Your project and settings are saved — you won’t lose progress.",
               ].join(" "),
             );
