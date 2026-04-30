@@ -57,7 +57,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           src={afterUrl}
           alt="After remodel"
           fill
-          className="pointer-events-none object-cover"
+          className="pointer-events-none object-contain"
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
           quality={75}
           priority={false}
@@ -72,7 +72,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             src={beforeUrl}
             alt="Before remodel"
             fill
-            className="object-cover"
+            className="object-contain"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
             quality={75}
             priority={false}
