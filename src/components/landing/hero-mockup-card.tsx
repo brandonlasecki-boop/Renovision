@@ -43,10 +43,13 @@ const LANDING_STYLE_OPTIONS: LandingStyleOption[] = [
 export function HeroMockupCard({
   className,
   linkToTry = false,
+  compactMobileHeroHeader = false,
 }: {
   className?: string;
   /** When true, show a primary button to `/try` (the card is no longer fully wrapped in a link so the slider can capture drag). */
   linkToTry?: boolean;
+  /** Hero: show only a short "Real Example" label on small screens to save vertical space. */
+  compactMobileHeroHeader?: boolean;
 }) {
   const [styleId, setStyleId] = useState<BathroomStyleId>("spa_retreat");
 
@@ -67,16 +70,37 @@ export function HeroMockupCard({
 
   return (
     <div className={shellClass}>
-      <div className="border-b border-border/60 bg-gradient-to-r from-renovision-navy/[0.08] to-transparent px-4 py-3 sm:px-5">
-        <p className="text-center text-xs font-bold uppercase tracking-[0.06em] text-renovision-navy sm:text-left sm:text-sm">
-          Real Example — Generated from a homeowner&apos;s photo
-        </p>
-        {styleMeta ? (
-          <p className="mt-1 text-center text-xs leading-snug text-muted-foreground sm:text-left">
-            <span className="font-medium text-foreground">{styleMeta.name}</span>
-            <span className="text-muted-foreground"> — {styleMeta.subtitle}</span>
-          </p>
-        ) : null}
+      <div className="border-b border-border/60 bg-gradient-to-r from-renovision-navy/[0.08] to-transparent px-4 py-2.5 sm:px-5 sm:py-3">
+        {compactMobileHeroHeader ? (
+          <>
+            <p className="text-center text-[11px] font-bold uppercase tracking-[0.08em] text-renovision-navy lg:hidden">
+              Real Example
+            </p>
+            <div className="hidden lg:block">
+              <p className="text-xs font-bold uppercase tracking-[0.06em] text-renovision-navy sm:text-sm">
+                Real Example — Generated from a homeowner&apos;s photo
+              </p>
+              {styleMeta ? (
+                <p className="mt-1 text-xs leading-snug text-muted-foreground">
+                  <span className="font-medium text-foreground">{styleMeta.name}</span>
+                  <span className="text-muted-foreground"> — {styleMeta.subtitle}</span>
+                </p>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-center text-xs font-bold uppercase tracking-[0.06em] text-renovision-navy sm:text-left sm:text-sm">
+              Real Example — Generated from a homeowner&apos;s photo
+            </p>
+            {styleMeta ? (
+              <p className="mt-1 text-center text-xs leading-snug text-muted-foreground sm:text-left">
+                <span className="font-medium text-foreground">{styleMeta.name}</span>
+                <span className="text-muted-foreground"> — {styleMeta.subtitle}</span>
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div className="space-y-3 p-3 sm:space-y-3.5 sm:p-4">
