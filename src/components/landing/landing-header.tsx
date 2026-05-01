@@ -5,6 +5,7 @@ import { TryCtaLink } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
 import { signOut } from "@/lib/actions/auth";
+import { getRenovisionAnonymousSessionIdFromCookie } from "@/lib/renovision/anonymous-cookie";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ export async function LandingHeader() {
   const showAdminNav = user
     ? await resolveViewerIsAdmin({ userId: user.id, email: user.email })
     : false;
+  const guestHasTrySession = !user && (await getRenovisionAnonymousSessionIdFromCookie());
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
@@ -40,7 +42,7 @@ export async function LandingHeader() {
           </nav>
 
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-3">
-            {user ? (
+            {user || guestHasTrySession ? (
               <Link
                 href="/projects"
                 className={cn(

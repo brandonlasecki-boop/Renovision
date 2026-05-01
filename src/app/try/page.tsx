@@ -43,12 +43,16 @@ export default async function RenovisionTryPage({
     : false;
   const explicitRestore = sp.restore_generation_id && sp.restore_project_id;
   const forceNew = sp.new === "1";
+  const shouldLoadLatest =
+    !forceNew &&
+    state.ok &&
+    (Boolean(user) || Boolean(state.anonymousSessionId));
   const restoredGeneration = explicitRestore
     ? await loadTryGenerationForViewer({
         generationId: sp.restore_generation_id!,
         projectId: sp.restore_project_id!,
       })
-    : !forceNew && user
+    : shouldLoadLatest
       ? await loadLatestTryGenerationForViewer()
       : null;
   const autoSavedProject =

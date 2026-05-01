@@ -17,12 +17,20 @@ export default async function SignupPage({
           <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
             Renovision
           </Link>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
-          >
-            ← Home
-          </Link>
+          <div className="flex items-center gap-3 text-sm">
+            <Link
+              href="/try"
+              className="font-medium text-renovision-navy underline-offset-4 transition hover:underline"
+            >
+              Back to preview
+            </Link>
+            <Link
+              href="/"
+              className="text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline"
+            >
+              ← Home
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-12">
