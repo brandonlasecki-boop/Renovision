@@ -815,6 +815,9 @@ export function HomeownerTryClient({
               <Label htmlFor="user_vision" className="text-sm font-semibold">
                 Have your own vision?
               </Label>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Describe what you want, then continue — you&apos;ll upload your bathroom photo on the next step.
+              </p>
               <textarea
                 id="user_vision"
                 value={userDescription}
@@ -823,6 +826,38 @@ export function HomeownerTryClient({
                 className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 placeholder="Example: bright spa bathroom with white tile, wood vanity, black fixtures…"
               />
+              {quickStyleSwitchMode && generation ? (
+                <form action={regenAction} className="mt-3">
+                  <input type="hidden" name="generation_id" value={generation.generationId} />
+                  <input type="hidden" name="project_id" value={generation.projectId} />
+                  <input type="hidden" name="selected_style" value="your_vision" />
+                  <input type="hidden" name="user_description" value={userDescription} />
+                  <input type="hidden" name="image_source" value="original" />
+                  <input type="hidden" name="attribution_json" value={attributionJson} />
+                  <Button type="submit" className="h-11 w-full rounded-xl" disabled={regenPending}>
+                    {regenPending ? "Designing your bathroom..." : "Generate from my description"}
+                  </Button>
+                </form>
+              ) : (
+                <Button
+                  type="button"
+                  className="mt-3 h-11 w-full rounded-xl"
+                  onClick={() => {
+                    const d = userDescription.trim();
+                    if (!d) {
+                      toast.error("Add a short description", {
+                        description: "Tell us what you want to see, or pick a style above instead.",
+                      });
+                      return;
+                    }
+                    setQuickStyleSwitchMode(false);
+                    setSelectedStyle("your_vision");
+                    setStep("upload");
+                  }}
+                >
+                  Continue to upload photo
+                </Button>
+              )}
             </div>
           </section>
         ) : null}
@@ -1324,17 +1359,21 @@ export function HomeownerTryClient({
                 <p className="text-xs text-muted-foreground">
                   Sign up or sign in to save your project and keep every preview version in one place.
                 </p>
-                {!initial.userEmail ? (
+                    {!initial.userEmail ? (
                   <>
                     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Link
-                        href="/signup?next=/try"
+                        href={`/signup?next=${encodeURIComponent(
+                          `/try?restore_generation_id=${encodeURIComponent(generation.generationId)}&restore_project_id=${encodeURIComponent(generation.projectId)}`,
+                        )}`}
                         className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-renovision-navy/90 sm:w-auto sm:min-w-[12rem]"
                       >
                         Create free account
                       </Link>
                       <Link
-                        href="/login?next=/try"
+                        href={`/login?next=${encodeURIComponent(
+                          `/try?restore_generation_id=${encodeURIComponent(generation.generationId)}&restore_project_id=${encodeURIComponent(generation.projectId)}`,
+                        )}`}
                         className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:w-auto sm:min-w-[10rem]"
                       >
                         Log in

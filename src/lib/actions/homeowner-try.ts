@@ -157,6 +157,11 @@ function buildGenerationPrompt(styleId: BathroomStyleId, userText?: string): str
     if (userText?.trim()) parts.push(userText.trim());
     return parts.join("\n\n");
   }
+  if (styleId === "your_vision") {
+    const custom = userText?.trim();
+    if (custom) return `${custom}\n\n${BATHROOM_MASTER_PROMPT}`;
+    return BATHROOM_MASTER_PROMPT;
+  }
   const parts = [BATHROOM_MASTER_PROMPT];
   if (userText?.trim()) parts.push(userText.trim());
   return parts.join("\n\n");
@@ -1117,6 +1122,53 @@ function fallbackTweakSuggestionsForStyle(styleId: BathroomStyleId): {
           ),
         ],
       };
+    case "your_vision":
+      return {
+        saveMoneySuggestions: [
+          tweakPair(
+            "Prioritize paint, hardware, and standard-format tile over bespoke materials while matching your described look.",
+            -900,
+            -320,
+          ),
+          tweakPair(
+            "Keep fixture locations; upgrade finishes and fixture lines that fit your palette without moving plumbing.",
+            -750,
+            -250,
+          ),
+          tweakPair(
+            "Use in-stock vanity sizes and porcelain field tile in your chosen tone instead of full custom pieces.",
+            -1100,
+            -400,
+          ),
+          tweakPair(
+            "Phase decor and accessories after locking surfaces and lighting that match your vision.",
+            -500,
+            -150,
+          ),
+        ],
+        improveDesignSuggestions: [
+          tweakPair(
+            "Tighten palette cohesion (metal family + grout + wall tone) so the room reads closer to your written direction.",
+            150,
+            650,
+          ),
+          tweakPair(
+            "Upgrade one focal plane (vanity wall or shower feature) with richer texture while staying in-budget.",
+            200,
+            800,
+          ),
+          tweakPair(
+            "Improve vanity lighting quality (sconce or bar) for a more polished version of the same layout.",
+            120,
+            520,
+          ),
+          tweakPair(
+            "Add intentional contrast or accent tile only where your description calls for a focal moment.",
+            180,
+            700,
+          ),
+        ],
+      };
     case "coastal_beach_house":
       return {
         saveMoneySuggestions: [
@@ -1923,6 +1975,9 @@ export async function generateBathroomMockupAction(
   const userDescription = String(formData.get("user_description") ?? "").trim().slice(0, 1600);
   const style = getBathroomStyleById(selectedStyleId);
   if (!style) return { error: "Choose a style to continue." };
+  if (style.id === "your_vision" && !userDescription) {
+    return { error: "Describe your vision in the box below, or pick a preset style above." };
+  }
 
   const viewer = await getViewerContext(true);
   if (!viewer.userId && !viewer.anonymousSessionId) {
@@ -2279,6 +2334,7 @@ export async function regenerateBathroomMockupAction(
   const customTweakRaw = String(formData.get("custom_tweak") ?? "")
     .trim()
     .slice(0, HOMEOWNER_CUSTOM_TWEAK_MAX_CHARS);
+  const userDescriptionRegen = String(formData.get("user_description") ?? "").trim().slice(0, 1600);
   const forceOpenAiComparison = false;
 
   const multiHintActive = saveHintSelections.length > 0 || designHintSelections.length > 0;
@@ -2286,6 +2342,18 @@ export async function regenerateBathroomMockupAction(
     return {
       error:
         "Select at least one suggestion, add custom directions, or both — then click Update preview.",
+    };
+  }
+
+  if (
+    selectedStyle === "your_vision" &&
+    !userDescriptionRegen &&
+    !multiHintActive &&
+    !legacyHint &&
+    !customTweakRaw
+  ) {
+    return {
+      error: "Describe your vision in the text box, or pick a preset style above.",
     };
   }
 
@@ -2304,7 +2372,7 @@ export async function regenerateBathroomMockupAction(
     suggestionKind = legacyKind;
     additionalPromptCore = buildRegenerateAdditionalPrompt(selectedStyle, legacyHint, legacyKind);
   } else {
-    additionalPromptCore = buildGenerationPrompt(selectedStyle);
+    additionalPromptCore = buildGenerationPrompt(selectedStyle, userDescriptionRegen);
   }
 
   if (customTweakRaw) {
@@ -2334,6 +2402,7 @@ export async function regenerateBathroomMockupAction(
     ...designHintSelections,
     legacyHint,
     customTweakRaw,
+    ...(regenerateFromRoom && userDescriptionRegen ? [userDescriptionRegen] : []),
   ].join("\n");
   const wetZoneRemodelIntent = detectWetZoneRemodelIntent(combinedTweakTextForWetZone);
   if (wetZoneRemodelIntent) {

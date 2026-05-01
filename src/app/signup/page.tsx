@@ -9,6 +9,8 @@ export default async function SignupPage({
   const sp = await searchParams;
   const nextPath =
     sp.next?.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/projects";
+  /** Preserve restore params when user opened signup from /try with a generation in progress. */
+  const backToPreviewHref = nextPath.startsWith("/try") ? nextPath : "/try";
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
@@ -19,7 +21,7 @@ export default async function SignupPage({
           </Link>
           <div className="flex items-center gap-3 text-sm">
             <Link
-              href="/try"
+              href={backToPreviewHref}
               className="font-medium text-renovision-navy underline-offset-4 transition hover:underline"
             >
               Back to preview

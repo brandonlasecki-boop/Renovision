@@ -12,7 +12,7 @@ import { LandingWhy } from "@/components/landing/landing-why";
 
 export default function HomePage() {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
       <LandingHeader />
       <main className="pb-[5.25rem] md:pb-0">
         <LandingHero />

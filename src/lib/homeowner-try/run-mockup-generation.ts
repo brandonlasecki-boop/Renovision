@@ -42,6 +42,7 @@ import {
   isVertexGoogleUserAuthFailureMessage,
   isVertexResourceExhaustedMessage,
   isVertexMockupTimeoutMessage,
+  isVertexTryMockupTransientRetryableMessage,
   resolveMockupImageProvider,
   vertexGeminiImageModel,
   vertexLocation,
@@ -360,15 +361,36 @@ export async function runHomeownerTryMockupGeneration(params: {
         ? MOCKUP_ONLY_REMODEL_EDIT_PROMPT_WET_ZONE
         : MOCKUP_ONLY_REMODEL_EDIT_PROMPT;
     } else {
-      const vision = await fetchMaterialsAndSummaryFromOpenAI({
-        apiKey,
-        companyName: RENOVISION_HOMEOWNER_COMPANY,
-        scopeDescription: scopeForAi,
-        beforeImageUrls: [beforeDataUrl],
-        ...(additionalPrompt ? { additionalPrompt } : {}),
-        /** Faster OpenAI vision on first `/try` pass (low image detail + lower max_tokens). Set TRY_DISABLE_FAST_HOMEOWNER_VISION=1 to force high detail locally. */
-        homeownerTryFastVision: process.env.TRY_DISABLE_FAST_HOMEOWNER_VISION?.trim() !== "1",
-      });
+      let vision: Awaited<ReturnType<typeof fetchMaterialsAndSummaryFromOpenAI>> | undefined;
+      for (let visionAttempt = 1; visionAttempt <= 3; visionAttempt += 1) {
+        try {
+          vision = await fetchMaterialsAndSummaryFromOpenAI({
+            apiKey,
+            companyName: RENOVISION_HOMEOWNER_COMPANY,
+            scopeDescription: scopeForAi,
+            beforeImageUrls: [beforeDataUrl],
+            ...(additionalPrompt ? { additionalPrompt } : {}),
+            /** Faster OpenAI vision on first `/try` pass (low image detail + lower max_tokens). Set TRY_DISABLE_FAST_HOMEOWNER_VISION=1 to force high detail locally. */
+            homeownerTryFastVision: process.env.TRY_DISABLE_FAST_HOMEOWNER_VISION?.trim() !== "1",
+          });
+          break;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const retryVision =
+            visionAttempt < 3 &&
+            /429|rate limit|timeout|timed out|fetch failed|econnreset|503|502|529|overloaded|socket/i.test(msg);
+          if (!retryVision) throw e;
+          const waitMs = 450 * visionAttempt ** 2 + Math.floor(Math.random() * 350);
+          console.warn(
+            `[mockup] OpenAI vision transient retry ${visionAttempt}/3 (wait ${waitMs}ms):`,
+            msg.slice(0, 200),
+          );
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
+      }
+      if (!vision) {
+        throw new Error("OpenAI vision failed after retries.");
+      }
 
       const {
         materials: visionMaterials,
@@ -557,7 +579,16 @@ export async function runHomeownerTryMockupGeneration(params: {
                       remodelEditFromVision: remodelEditPrompt,
                       wetZoneRemodelIntent: params.wetZoneRemodelIntent,
                     })
-                  : editPromptOpenAi;
+                  : params.selectedStyle === "your_vision"
+                    ? buildVertexCleanRefreshTryImageEditPrompt({
+                        scopeDescription: scopeForAi,
+                        roomAnalysis,
+                        additionalPrompt: enforcedAdditionalPrompt,
+                        quoteLineContext,
+                        remodelEditFromVision: remodelEditPrompt,
+                        wetZoneRemodelIntent: params.wetZoneRemodelIntent,
+                      })
+                    : editPromptOpenAi;
 
     editPromptVertex = prependTweakPriorityLayerToImagePrompt(editPromptVertex, {
       regenerateFromRoom: params.regenerateFromRoom,
@@ -623,10 +654,10 @@ export async function runHomeownerTryMockupGeneration(params: {
     }
 
     /**
-     * Vertex can return transient 429 RESOURCE_EXHAUSTED during bursts.
-     * Retry a few times with exponential backoff before surfacing failure.
+     * Vertex often fails once with 429, overload, timeout, or brief network errors — especially on mobile.
+     * Retry transient errors with backoff (same knobs as quota: TRY_VERTEX_QUOTA_RETRY_*).
      */
-    async function runVertexImageEditWithQuotaRetry(): Promise<ArrayBuffer> {
+    async function runVertexImageEditWithTransientRetry(): Promise<ArrayBuffer> {
       const triesRaw = Number(process.env.TRY_VERTEX_QUOTA_RETRY_ATTEMPTS ?? "");
       const maxAttempts = Number.isFinite(triesRaw)
         ? Math.max(1, Math.min(6, Math.floor(triesRaw)))
@@ -651,15 +682,15 @@ export async function runHomeownerTryMockupGeneration(params: {
         } catch (err) {
           lastErr = err;
           const msg = err instanceof Error ? err.message : String(err);
-          const isQuota = isVertexResourceExhaustedMessage(msg);
-          if (!isQuota || attempt >= maxAttempts) break;
+          const retryable = isVertexTryMockupTransientRetryableMessage(msg);
+          if (!retryable || attempt >= maxAttempts) break;
           const waitMs = Math.min(
-            20_000,
-            baseMs * 2 ** (attempt - 1) + Math.floor(Math.random() * 400),
+            25_000,
+            baseMs * 2 ** (attempt - 1) + Math.floor(Math.random() * 500),
           );
           console.warn(
-            `[mockup] Vertex quota retry ${attempt}/${maxAttempts} (waiting ${waitMs}ms):`,
-            msg.slice(0, 220),
+            `[mockup] Vertex transient retry ${attempt}/${maxAttempts} (waiting ${waitMs}ms):`,
+            msg.slice(0, 240),
           );
           await new Promise((resolve) => setTimeout(resolve, waitMs));
         }
@@ -749,7 +780,7 @@ export async function runHomeownerTryMockupGeneration(params: {
       }
     } else if (mockupImageProvider === "vertex_gemini") {
       try {
-        png = await runVertexImageEditWithQuotaRetry();
+        png = await runVertexImageEditWithTransientRetry();
         usedMockupProvider = "vertex_gemini";
         resolvedImageEditPrompt = editPromptVertex;
       } catch (vertexErr) {

@@ -4,7 +4,9 @@ export type BathroomStyleId =
   | "luxury_escape"
   | "bold_modern"
   | "warm_minimalist"
-  | "coastal_beach_house";
+  | "coastal_beach_house"
+  /** Textarea-only path on /try; prompt is driven by homeowner description. */
+  | "your_vision";
 
 export type BathroomStyleConfig = {
   id: BathroomStyleId;
@@ -110,6 +112,21 @@ export const BATHROOM_STYLES: BathroomStyleConfig[] = [
     fixturesMax: 2000,
     scopeSeed:
       "coastal beach house bathroom with light airy colors, soft blue and sand tones, light wood or white vanity, bright natural-feeling tile, woven textures, and relaxed beach-house character while preserving layout",
+  },
+  {
+    id: "your_vision",
+    name: "Your vision",
+    subtitle: "You describe it; we visualize it",
+    estimateMin: 6500,
+    estimateMax: 11500,
+    materialMin: 2400,
+    materialMax: 4200,
+    laborMin: 3200,
+    laborMax: 5200,
+    fixturesMin: 900,
+    fixturesMax: 2100,
+    scopeSeed:
+      "bathroom remodel guided by the homeowner-written direction below; preserve layout and camera unless the direction implies wet-zone changes",
   },
 ];
 

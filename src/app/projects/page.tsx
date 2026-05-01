@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+import { TryAnonSessionBootstrap } from "@/components/homeowner/try-anon-session-bootstrap";
 import { listProjectsForProjectsPage } from "@/lib/data/renovision-saved-projects";
 import { buttonVariants } from "@/components/ui/button";
 import { renameSavedProjectAction } from "@/lib/actions/renovision-saved-projects";
@@ -15,8 +16,33 @@ export default async function MyProjectsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const anonCookie = await getRenovisionAnonymousSessionIdFromCookie();
+
+  /**
+   * Guest previews are keyed by an httpOnly cookie. RSC cannot set it — same as `/try`, we must run a
+   * Server Action from the client once. Without this, opening My Projects first on mobile shows an empty
+   * list even after a preview because no session cookie was ever stored.
+   */
+  if (!user && !anonCookie) {
+    return (
+      <div className="min-h-screen bg-muted/30">
+        <header className="border-b border-border/60 bg-background/85 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+            <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
+              Renovision
+            </Link>
+            <Link href="/try?new=1" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+              Start new design
+            </Link>
+          </div>
+        </header>
+        <TryAnonSessionBootstrap />
+      </div>
+    );
+  }
+
   const { rows } = await listProjectsForProjectsPage();
-  const hasGuestSession = !user && (await getRenovisionAnonymousSessionIdFromCookie());
+  const hasGuestSession = !user && Boolean(anonCookie);
 
   return (
     <div className="min-h-screen bg-muted/30">

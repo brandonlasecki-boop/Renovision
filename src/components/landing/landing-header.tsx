@@ -22,19 +22,19 @@ export async function LandingHeader() {
   const guestHasTrySession = !user && (await getRenovisionAnonymousSessionIdFromCookie());
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-      <div className="mx-auto max-w-6xl px-3 py-1 sm:px-6 sm:py-1 lg:px-8">
-        <div className="flex min-h-0 items-center justify-between gap-2 py-0 sm:gap-3">
+    <header className="sticky top-0 z-50 min-w-0 max-w-full overflow-x-hidden border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+      <div className="mx-auto max-w-6xl min-w-0 px-3 py-1 sm:px-6 sm:py-1 lg:px-8">
+        <div className="flex min-h-0 min-w-0 items-center justify-between gap-2 py-0 sm:gap-3">
           <Link
             href="/"
             className={cn(
-              "relative block shrink-0 overflow-hidden",
-              "h-9 w-[220px] sm:h-10 sm:w-[300px] md:w-[360px] lg:w-[400px]",
+              "relative block min-w-0 max-w-[56%] overflow-hidden sm:max-w-none",
+              "h-9 sm:h-10 sm:w-[300px] md:w-[360px] lg:w-[400px]",
             )}
           >
             <RenovisionLogo
               className={cn(
-                "absolute left-0 top-1/2 -translate-y-1/2",
+                "absolute left-0 top-1/2 max-w-none -translate-y-1/2",
                 "h-12 w-[260px] sm:h-16 sm:w-[340px] md:h-[4.25rem] md:w-[400px] lg:h-[4.5rem] lg:w-[440px]",
               )}
             />
@@ -52,7 +52,7 @@ export async function LandingHeader() {
             </a>
           </nav>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:max-w-none sm:flex-none sm:gap-3">
             {user || guestHasTrySession ? (
               <Link
                 href="/projects"

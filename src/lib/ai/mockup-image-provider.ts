@@ -146,6 +146,33 @@ export function isVertexResourceExhaustedMessage(message: string): boolean {
 }
 
 /**
+ * Homeowner `/try` Vertex image step: errors that are often transient — worth retrying with backoff
+ * (mobile networks, cold starts, short overload windows). Never retry auth / misconfiguration.
+ */
+export function isVertexTryMockupTransientRetryableMessage(message: string): boolean {
+  if (isVertexGoogleUserAuthFailureMessage(message)) return false;
+  if (isVertexResourceExhaustedMessage(message)) return true;
+  if (isVertexMockupTimeoutMessage(message)) return true;
+  const m = message.toLowerCase();
+  if (m.includes("econnreset") || m.includes("etimedout") || m.includes("fetch failed")) return true;
+  if (m.includes("socket hang up") || m.includes("und_err_socket") || m.includes("network error")) return true;
+  if (
+    m.includes("http_status=503") ||
+    m.includes("http_status=502") ||
+    m.includes("http_status=504") ||
+    m.includes("http_status=500")
+  ) {
+    return true;
+  }
+  if (m.includes("unavailable") || m.includes("service_unavailable")) return true;
+  if (m.includes("deadline_exceeded")) return true;
+  if (m.includes("overloaded") || m.includes("try again")) return true;
+  if (m.includes("internal error") && (m.includes("vertex") || m.includes("gemini") || m.includes("generat")))
+    return true;
+  return false;
+}
+
+/**
  * Retry mockup image generation with OpenAI after Vertex RAPT / `invalid_grant` user-credential errors.
  * - Explicit `MOCKUP_VERTEX_AUTH_OPENAI_FALLBACK=0` / `false` / `no` / `off` → never fall back.
  * - Explicit `1` / `true` / `yes` / `on` → always fall back when the error matches.
