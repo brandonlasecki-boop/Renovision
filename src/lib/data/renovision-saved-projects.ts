@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { PHOTOS_BUCKET } from "@/lib/supabase/constants";
+import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
+import { getRenovisionAnonymousSessionIdFromCookie } from "@/lib/renovision/anonymous-cookie";
 
 export type SavedProjectCard = {
   id: string;
@@ -50,6 +52,69 @@ export async function listViewerSavedProjects(): Promise<SavedProjectCard[]> {
     });
   }
   return out;
+}
+
+/** Guest try sessions: show `homeowner_try_projects` tied to the anonymous cookie (no explicit “save” required). */
+async function listGuestTryProjectsAsCards(): Promise<SavedProjectCard[]> {
+  const anonId = await getRenovisionAnonymousSessionIdFromCookie();
+  if (!anonId) return [];
+
+  const svc = createServiceClient();
+  const { data: projects } = await svc
+    .from("homeowner_try_projects")
+    .select("id, created_at")
+    .eq("anonymous_session_id", anonId)
+    .is("user_id", null)
+    .order("updated_at", { ascending: false });
+
+  const out: SavedProjectCard[] = [];
+  for (const p of projects ?? []) {
+    const projectId = String(p.id);
+    const { data: gen } = await svc
+      .from("bathroom_generations")
+      .select("id, estimate_min, estimate_max, selected_style, generated_image_url")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!gen?.id) continue;
+
+    const genPath = String(gen.generated_image_url ?? "").trim();
+    if (!genPath) continue;
+
+    const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(genPath, 60 * 60);
+    const styleMeta = getBathroomStyleById(String(gen.selected_style ?? ""));
+    const displayName = styleMeta?.name ?? String(gen.selected_style ?? "Remodel preview");
+
+    out.push({
+      id: `guest:${projectId}`,
+      projectId,
+      generationId: String(gen.id),
+      projectName: displayName,
+      selectedStyle: gen.selected_style ? String(gen.selected_style) : null,
+      estimateMin: gen.estimate_min == null ? null : Number(gen.estimate_min),
+      estimateMax: gen.estimate_max == null ? null : Number(gen.estimate_max),
+      createdAt: String(p.created_at),
+      mockupUrl: signed.data?.signedUrl ?? null,
+    });
+  }
+  return out;
+}
+
+/** Signed-in users: saved-project rows. Guests: active try projects for this browser session. */
+export async function listProjectsForProjectsPage(): Promise<{
+  rows: Array<{ card: SavedProjectCard; isGuest: boolean }>;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const cards = await listViewerSavedProjects();
+    return { rows: cards.map((card) => ({ card, isGuest: false })) };
+  }
+  const cards = await listGuestTryProjectsAsCards();
+  return { rows: cards.map((card) => ({ card, isGuest: true })) };
 }
 
 export type SavedProjectDetail = {

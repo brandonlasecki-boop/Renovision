@@ -127,6 +127,10 @@ export default async function RenovisionTryPage({
                 </Link>
                 <StartNewTryLink />
               </>
+            ) : state.anonymousSessionId ? (
+              <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                My Projects
+              </Link>
             ) : null}
             <Link
               href="/"

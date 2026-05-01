@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Camera, ChevronDown, Images } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1295,8 +1296,35 @@ export function HomeownerTryClient({
                   Start New Project
                 </Button>
               </div>
-              <div className="mt-3 space-y-1">
-                <p className="text-xs text-muted-foreground">Sign in to keep your project history and versions.</p>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Sign up or sign in to save your project and keep every preview version in one place.
+                </p>
+                {!initial.userEmail ? (
+                  <>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <Link
+                        href="/signup?next=/try"
+                        className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-renovision-navy/90 sm:w-auto sm:min-w-[12rem]"
+                      >
+                        Create free account
+                      </Link>
+                      <Link
+                        href="/login?next=/try"
+                        className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:w-auto sm:min-w-[10rem]"
+                      >
+                        Log in
+                      </Link>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Your previews also appear in{" "}
+                      <Link href="/projects" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                        My Projects
+                      </Link>{" "}
+                      on this device.
+                    </p>
+                  </>
+                ) : null}
                 <p className="text-xs text-muted-foreground">No contractor contact unless you request it.</p>
               </div>
             </div>

@@ -159,7 +159,7 @@ export function HeroMockupCard({
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-renovision-teal/60 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-renovision-teal" />
             </span>
-            <span className="text-xs font-medium text-muted-foreground">Drag slider to compare</span>
+            <span className="text-xs font-medium text-muted-foreground">Use the slider below to compare</span>
           </div>
           {linkToTry ? (
             <TryCtaLink

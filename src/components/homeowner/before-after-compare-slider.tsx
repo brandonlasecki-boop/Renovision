@@ -14,7 +14,8 @@ type BeforeAfterCompareSliderProps = {
 
 /**
  * Full-width before/after: use the range control below the images to compare (avoids blocking page scroll on touch).
- * Double-click the preview to open fullscreen. Non-compact layouts include thumbnail shortcuts.
+ * Compact (hero mockup): only the range input adjusts the split (no image double-click fullscreen).
+ * Non-compact: double-click the preview for fullscreen; thumbnail row below for shortcuts.
  */
 export function BeforeAfterCompareSlider({
   beforeUrl,
@@ -59,7 +60,11 @@ export function BeforeAfterCompareSlider({
             : "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
         }
         style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
-        onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
+        onDoubleClick={
+          compact
+            ? undefined
+            : () => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })
+        }
       >
         <Image
           src={afterUrl}
