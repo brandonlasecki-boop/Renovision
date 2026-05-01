@@ -1,13 +1,18 @@
 "use client";
 
-import Link, { type LinkProps } from "next/link";
+import Link from "next/link";
+import type { ComponentProps, PropsWithChildren } from "react";
 
 import { trackTryCtaClick, type TryCtaPlacement } from "@/lib/analytics/try-cta";
 
-type Props = Omit<LinkProps, "onClick"> & {
-  placement: TryCtaPlacement;
-  onClick?: LinkProps["onClick"];
-};
+type BaseLinkProps = ComponentProps<typeof Link>;
+
+type Props = PropsWithChildren<
+  Omit<BaseLinkProps, "onClick"> & {
+    placement: TryCtaPlacement;
+    onClick?: BaseLinkProps["onClick"];
+  }
+>;
 
 export function TryCtaLink({ placement, href, onClick, ...rest }: Props) {
   const hrefStr = typeof href === "string" ? href : undefined;
