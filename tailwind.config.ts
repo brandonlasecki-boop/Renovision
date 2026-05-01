@@ -31,11 +31,21 @@ export default {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(320%)" },
         },
+        "landing-cue-in": {
+          "0%": { opacity: "0", transform: "translateY(0.4rem)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "landing-interactive-pop": {
+          "0%": { opacity: "0", transform: "translateY(0.35rem)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "mockup-scan": "mockup-scan 2.35s cubic-bezier(0.45, 0, 0.55, 1) infinite",
         "questions-shimmer":
           "questions-shimmer 1.85s cubic-bezier(0.45, 0, 0.55, 1) infinite",
+        "landing-cue-in": "landing-cue-in 0.55s ease-out both",
+        "landing-interactive-pop": "landing-interactive-pop 0.45s ease-out both",
       },
       colors: {
         renovision: {

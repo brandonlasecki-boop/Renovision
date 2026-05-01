@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 import { listProjectsForProjectsPage } from "@/lib/data/renovision-saved-projects";
 import { buttonVariants } from "@/components/ui/button";
 import { renameSavedProjectAction } from "@/lib/actions/renovision-saved-projects";

@@ -3,13 +3,25 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
+import { cn } from "@/lib/utils";
+
 type BeforeAfterCompareSliderProps = {
   beforeUrl: string;
   afterUrl: string;
   /** Omit thumbnail row below the slider for tighter layouts (e.g. marketing hero). */
   compact?: boolean;
+  /** Larger compact treatment for above-the-fold landing hero (still no thumbnail strip). */
+  compactVariant?: "default" | "hero";
   /** Set when images are above-the-fold (hero/LCP). */
   imagePriority?: boolean;
+  /** When set (0–100), slider position is controlled externally (e.g. scroll-driven landing section). */
+  controlledPct?: number;
+  /** Hide the range control (paired with {@link controlledPct} for non-interactive demos). */
+  hideRange?: boolean;
+  /** Replaces default “Scroll to see…” helper when {@link hideRange} is true. */
+  compareHint?: string | null;
+  /** Initial slider position (0–100) when uncontrolled; ignored while {@link controlledPct} is set. Default 50. */
+  initialSliderPct?: number;
 };
 
 /**
@@ -21,9 +33,17 @@ export function BeforeAfterCompareSlider({
   beforeUrl,
   afterUrl,
   compact = false,
+  compactVariant = "default",
   imagePriority = false,
+  controlledPct,
+  hideRange = false,
+  compareHint,
+  initialSliderPct,
 }: BeforeAfterCompareSliderProps) {
-  const [pct, setPct] = useState(50);
+  const [internalPct, setInternalPct] = useState(() =>
+    initialSliderPct !== undefined ? initialSliderPct : 50,
+  );
+  const pct = controlledPct !== undefined ? controlledPct : internalPct;
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: "Before" | "After" } | null>(
     null,
   );
@@ -56,7 +76,12 @@ export function BeforeAfterCompareSlider({
       <div
         className={
           compact
-            ? "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[16/11] sm:min-h-[14rem]"
+            ? cn(
+                "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm",
+                compactVariant === "hero"
+                  ? "sm:aspect-[16/10] sm:min-h-[17rem] lg:min-h-[19rem]"
+                  : "sm:aspect-[16/11] sm:min-h-[14rem]",
+              )
             : "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
         }
         style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
@@ -105,19 +130,28 @@ export function BeforeAfterCompareSlider({
           After
         </div>
       </div>
-      <div className="flex items-center gap-3 px-1">
-        <span className="text-xs text-muted-foreground">Before</span>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={pct}
-          onChange={(e) => setPct(Number(e.target.value))}
-          className="h-2 min-w-0 flex-1 cursor-ew-resize accent-renovision-orange"
-          aria-label="Slide to compare before and after"
-        />
-        <span className="text-xs text-muted-foreground">After</span>
-      </div>
+      {!hideRange ? (
+        <div className="flex items-center gap-3 px-1">
+          <span className="text-xs text-muted-foreground">Before</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={pct}
+            onChange={(e) => {
+              if (controlledPct !== undefined) return;
+              setInternalPct(Number(e.target.value));
+            }}
+            className="h-2 min-w-0 flex-1 cursor-ew-resize accent-renovision-orange"
+            aria-label="Slide to compare before and after"
+          />
+          <span className="text-xs text-muted-foreground">After</span>
+        </div>
+      ) : compareHint === null ? null : (
+        <p className="px-1 text-center text-xs text-muted-foreground">
+          {compareHint ?? "Scroll to see the full transformation"}
+        </p>
+      )}
       {!compact ? (
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button

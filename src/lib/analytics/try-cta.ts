@@ -6,6 +6,7 @@ export type TryCtaPlacement =
   | "landing_header"
   | "landing_mobile_bar"
   | "landing_mockup_card"
+  | "landing_scroll_transformation_followup"
   | "landing_footer"
   | "landing_final_cta"
   | "landing_why"

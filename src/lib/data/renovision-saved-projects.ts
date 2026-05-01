@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { PHOTOS_BUCKET } from "@/lib/supabase/constants";
-import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
+import {
+  getBathroomStyleById,
+  resolveBathroomStyleIdFromGeneration,
+} from "@/lib/homeowner-try/bathroom-styles";
 import { getRenovisionAnonymousSessionIdFromCookie } from "@/lib/renovision/anonymous-cookie";
 
 export type SavedProjectCard = {
@@ -54,16 +57,42 @@ export async function listViewerSavedProjects(): Promise<SavedProjectCard[]> {
   return out;
 }
 
-/** Guest try sessions: show `homeowner_try_projects` tied to the anonymous cookie (no explicit “save” required). */
+/**
+ * Guest try sessions: show try projects for this browser (no explicit “save” required).
+ * Discover by `homeowner_try_projects.anonymous_session_id` and by `bathroom_generations.session_id`
+ * so listings stay in sync with `/try` restore (which keys off generation session_id).
+ */
 async function listGuestTryProjectsAsCards(): Promise<SavedProjectCard[]> {
   const anonId = await getRenovisionAnonymousSessionIdFromCookie();
   if (!anonId) return [];
 
   const svc = createServiceClient();
+
+  const [{ data: linkedProjects }, { data: sessionGenRows }] = await Promise.all([
+    svc
+      .from("homeowner_try_projects")
+      .select("id")
+      .eq("anonymous_session_id", anonId)
+      .is("user_id", null),
+    svc.from("bathroom_generations").select("project_id").eq("session_id", anonId),
+  ]);
+
+  const projectIds = new Set<string>();
+  for (const row of linkedProjects ?? []) {
+    projectIds.add(String(row.id));
+  }
+  for (const row of sessionGenRows ?? []) {
+    const pid = row.project_id != null ? String(row.project_id) : "";
+    if (pid) projectIds.add(pid);
+  }
+
+  if (projectIds.size === 0) return [];
+
+  const ids = [...projectIds];
   const { data: projects } = await svc
     .from("homeowner_try_projects")
     .select("id, created_at")
-    .eq("anonymous_session_id", anonId)
+    .in("id", ids)
     .is("user_id", null)
     .order("updated_at", { ascending: false });
 
@@ -80,10 +109,14 @@ async function listGuestTryProjectsAsCards(): Promise<SavedProjectCard[]> {
     if (!gen?.id) continue;
 
     const genPath = String(gen.generated_image_url ?? "").trim();
-    if (!genPath) continue;
+    let mockupUrl: string | null = null;
+    if (genPath) {
+      const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(genPath, 60 * 60);
+      mockupUrl = signed.data?.signedUrl ?? null;
+    }
 
-    const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(genPath, 60 * 60);
-    const styleMeta = getBathroomStyleById(String(gen.selected_style ?? ""));
+    const styleId = resolveBathroomStyleIdFromGeneration(gen.selected_style);
+    const styleMeta = getBathroomStyleById(styleId);
     const displayName = styleMeta?.name ?? String(gen.selected_style ?? "Remodel preview");
 
     out.push({
@@ -95,7 +128,7 @@ async function listGuestTryProjectsAsCards(): Promise<SavedProjectCard[]> {
       estimateMin: gen.estimate_min == null ? null : Number(gen.estimate_min),
       estimateMax: gen.estimate_max == null ? null : Number(gen.estimate_max),
       createdAt: String(p.created_at),
-      mockupUrl: signed.data?.signedUrl ?? null,
+      mockupUrl,
     });
   }
   return out;
