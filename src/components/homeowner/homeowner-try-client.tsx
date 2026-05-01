@@ -48,7 +48,8 @@ const usd = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 const MAX_SAFE_PREVIEW_BYTES = 8 * 1024 * 1024;
-const MAX_SAFE_MOBILE_UPLOAD_BYTES = 12 * 1024 * 1024;
+/** Matches server `generateBathroomMockupAction` limit; server normalizes/resizes large photos. */
+const MAX_TRY_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 /** Approximate shift to total job midpoint vs current estimate; from estimator JSON. */
 function formatTweakImpactBand(s: TryTweakSuggestion): string {
@@ -84,7 +85,7 @@ function assignImageToFileInput(target: HTMLInputElement, file: File | undefined
   } catch {
     return;
   }
-  target.dispatchEvent(new Event("input", { bubbles: true }));
+  /** One synthetic `change` avoids duplicate React handlers (camera/library helpers copy onto main input). */
   target.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
@@ -846,20 +847,11 @@ export function HomeownerTryClient({
                     // here or the generating loader loses the “before” image mid-request.
                     return;
                   }
-                  if (isLikelyMobileBrowser() && isLikelyHeic(file)) {
+                  if (file.size > MAX_TRY_UPLOAD_BYTES) {
                     setFirstUploadPreviewUrl(null);
                     setLoaderBeforeBlob(null);
-                    toast.error("This photo format is not supported on mobile upload.", {
-                      description: "Please use a JPG or PNG photo (iPhone: Camera > Formats > Most Compatible).",
-                    });
-                    e.currentTarget.value = "";
-                    return;
-                  }
-                  if (isLikelyMobileBrowser() && file.size > MAX_SAFE_MOBILE_UPLOAD_BYTES) {
-                    setFirstUploadPreviewUrl(null);
-                    setLoaderBeforeBlob(null);
-                    toast.error("Photo is too large for reliable mobile generation.", {
-                      description: "Please choose a smaller image (under 12 MB) or retake at a lower resolution.",
+                    toast.error("Photo is too large.", {
+                      description: "Please choose an image under 20 MB or retake at a lower resolution.",
                     });
                     e.currentTarget.value = "";
                     return;
@@ -870,6 +862,15 @@ export function HomeownerTryClient({
                   });
                   const objectUrl = URL.createObjectURL(file);
                   setLoaderBeforeBlob(objectUrl);
+                  /** HEIC/HEIF: browsers often can’t decode for inline preview; server converts with Sharp. */
+                  if (isLikelyHeic(file)) {
+                    setFirstUploadPreviewUrl(null);
+                    toast.message("Photo selected", {
+                      description:
+                        "Apple HEIC/HEIF uploads work — inline preview may be skipped until generation finishes.",
+                    });
+                    return;
+                  }
                   if (previewAllowed(file)) {
                     setFirstUploadPreviewUrl(objectUrl);
                     toast.message("Photo selected");
