@@ -22,6 +22,8 @@ type BeforeAfterCompareSliderProps = {
   compareHint?: string | null;
   /** Initial slider position (0–100) when uncontrolled; ignored while {@link controlledPct} is set. Default 50. */
   initialSliderPct?: number;
+  /** Merges into the root stack (e.g. `space-y-0` for tighter landing demos). */
+  className?: string;
 };
 
 /**
@@ -39,6 +41,7 @@ export function BeforeAfterCompareSlider({
   hideRange = false,
   compareHint,
   initialSliderPct,
+  className,
 }: BeforeAfterCompareSliderProps) {
   const [internalPct, setInternalPct] = useState(() =>
     initialSliderPct !== undefined ? initialSliderPct : 50,
@@ -72,7 +75,7 @@ export function BeforeAfterCompareSlider({
   }, [afterUrl]);
 
   return (
-    <div className={compact ? "space-y-2" : "space-y-3"}>
+    <div className={cn(compact ? "space-y-2" : "space-y-3", className)}>
       <div
         className={
           compact
@@ -153,8 +156,8 @@ export function BeforeAfterCompareSlider({
           <span className="text-xs text-muted-foreground">After</span>
         </div>
       ) : compareHint === null ? null : (
-        <p className="px-1 text-center text-xs text-muted-foreground">
-          {compareHint ?? "Scroll to see the full transformation"}
+        <p className="mt-1 px-1 text-center text-[11px] leading-tight text-muted-foreground sm:text-xs">
+          {compareHint ?? "Before and after · drag the slider when available"}
         </p>
       )}
       {!compact ? (

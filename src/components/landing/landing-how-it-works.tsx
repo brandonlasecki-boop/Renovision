@@ -30,7 +30,7 @@ export function LandingHowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="relative scroll-mt-24 overflow-hidden border-b border-border/40 bg-background px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+      className="relative scroll-mt-24 overflow-hidden border-b border-border/40 bg-background px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-28"
     >
       <div
         className="pointer-events-none absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-renovision-orange/[0.06] blur-3xl"
