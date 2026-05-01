@@ -88,12 +88,17 @@ export function BeforeAfterCompareSlider({
         onDoubleClick={
           compact
             ? undefined
-            : () => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })
+            : () =>
+                setFullscreenImage({
+                  src: pct > 50 ? afterUrl : beforeUrl,
+                  label: pct > 50 ? "After" : "Before",
+                })
         }
       >
+        {/* Same stacking as the bid mockup slider: before underneath, after clipped on top. */}
         <Image
-          src={afterUrl}
-          alt="After remodel"
+          src={beforeUrl}
+          alt="Before remodel"
           fill
           className={`pointer-events-none ${imageFitClass}`}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
@@ -103,12 +108,12 @@ export function BeforeAfterCompareSlider({
           draggable={false}
         />
         <div
-          className="pointer-events-none absolute inset-0 z-10"
+          className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
           style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }}
         >
           <Image
-            src={beforeUrl}
-            alt="Before remodel"
+            src={afterUrl}
+            alt="After remodel"
             fill
             className={imageFitClass}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"

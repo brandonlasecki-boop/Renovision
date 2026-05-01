@@ -23,10 +23,21 @@ export async function LandingHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-      <div className="mx-auto max-w-6xl px-3 py-1 sm:px-6 sm:py-2.5 lg:px-8">
-        <div className="flex min-h-0 items-center justify-between gap-2 py-0 sm:min-h-[4.25rem] sm:gap-3 sm:py-2.5">
-          <Link href="/" className="min-w-0 shrink py-0 sm:py-1">
-            <RenovisionLogo className="h-8 w-[132px] sm:h-[4.25rem] sm:w-[312px] md:h-[5.25rem] md:w-[360px]" />
+      <div className="mx-auto max-w-6xl px-3 py-1 sm:px-6 sm:py-1 lg:px-8">
+        <div className="flex min-h-0 items-center justify-between gap-2 py-0 sm:gap-3">
+          <Link
+            href="/"
+            className={cn(
+              "relative block shrink-0 overflow-hidden",
+              "h-9 w-[220px] sm:h-10 sm:w-[300px] md:w-[360px] lg:w-[400px]",
+            )}
+          >
+            <RenovisionLogo
+              className={cn(
+                "absolute left-0 top-1/2 -translate-y-1/2",
+                "h-12 w-[260px] sm:h-16 sm:w-[340px] md:h-[4.25rem] md:w-[400px] lg:h-[4.5rem] lg:w-[440px]",
+              )}
+            />
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
