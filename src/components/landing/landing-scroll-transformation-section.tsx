@@ -353,14 +353,24 @@ export function LandingScrollTransformationSection() {
       aria-labelledby="watch-transformation-heading"
       className="scroll-mt-16 border-b border-border/40 bg-gradient-to-b from-background via-[#faf8f4]/40 to-background sm:scroll-mt-24"
     >
-      <div className="mx-auto max-w-6xl px-4 pb-0 pt-2 text-center sm:px-6 sm:pb-4 sm:pt-8 lg:px-8">
+      <div
+        className={cn(
+          "mx-auto max-w-6xl px-4 pt-2 text-center sm:px-6 sm:pb-4 sm:pt-8 lg:px-8",
+          isMobile && phase === "interactive" ? "pb-4" : "pb-0",
+        )}
+      >
         <h2
           id="watch-transformation-heading"
           className="text-balance text-xl font-semibold tracking-tight text-foreground sm:text-3xl"
         >
           Watch a Real Bathroom Transformation
         </h2>
-        <p className="mx-auto mt-0 max-w-2xl text-pretty text-sm leading-snug text-muted-foreground sm:mt-2 sm:text-base">
+        <p
+          className={cn(
+            "mx-auto max-w-2xl text-pretty text-sm leading-snug text-muted-foreground sm:mt-2 sm:text-base",
+            isMobile && phase === "interactive" ? "mt-2 pb-1" : "mt-0",
+          )}
+        >
           {scrollPhaseSubtitle}
         </p>
       </div>
@@ -381,7 +391,12 @@ export function LandingScrollTransformationSection() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-6xl -mt-5 px-3 pb-2 pt-0 sm:mt-0 sm:px-6 lg:px-8">
+        <div
+          className={cn(
+            "mx-auto max-w-6xl px-3 pb-2 sm:px-6 lg:px-8",
+            phase === "interactive" ? "mt-4 pt-0" : "-mt-5 pt-0",
+          )}
+        >
           <div ref={cardRef} className="mx-auto max-w-2xl scroll-mt-14 sm:scroll-mt-24">
             {cardShell}
           </div>
