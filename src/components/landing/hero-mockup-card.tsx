@@ -1,11 +1,11 @@
 "use client";
 
 import type { StaticImageData } from "next/image";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
+import { TryCtaLink } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
 import type { BathroomStyleId } from "@/lib/homeowner-try/bathroom-styles";
@@ -67,9 +67,9 @@ export function HeroMockupCard({
 
   return (
     <div className={shellClass}>
-      <div className="border-b border-border/60 bg-gradient-to-r from-renovision-navy/[0.06] to-transparent px-4 py-2.5 sm:px-5">
-        <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-renovision-navy sm:text-left sm:text-xs">
-          Real Example — Same Bathroom, Remodeled
+      <div className="border-b border-border/60 bg-gradient-to-r from-renovision-navy/[0.08] to-transparent px-4 py-3 sm:px-5">
+        <p className="text-center text-xs font-bold uppercase tracking-[0.06em] text-renovision-navy sm:text-left sm:text-sm">
+          Real Example — Generated from a homeowner&apos;s photo
         </p>
         {styleMeta ? (
           <p className="mt-1 text-center text-xs leading-snug text-muted-foreground sm:text-left">
@@ -138,15 +138,16 @@ export function HeroMockupCard({
             <span className="text-xs font-medium text-muted-foreground">Drag slider to compare</span>
           </div>
           {linkToTry ? (
-            <Link
+            <TryCtaLink
+              placement="landing_mockup_card"
               href="/try"
               className={cn(
                 buttonVariants({ size: "default" }),
                 "h-10 shrink-0 bg-renovision-navy px-5 text-sm font-semibold text-white hover:bg-renovision-navy/90",
               )}
             >
-              Try your bathroom
-            </Link>
+              Start free preview
+            </TryCtaLink>
           ) : null}
         </div>
       </div>

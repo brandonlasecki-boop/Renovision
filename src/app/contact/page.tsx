@@ -15,9 +15,9 @@ export default function ContactPage() {
           Reach us at{" "}
           <a
             className="font-medium text-renovision-navy underline-offset-4 hover:underline"
-            href="mailto:hello@renovision.com"
+            href="mailto:hello@getrenovision.com"
           >
-            hello@renovision.com
+            hello@getrenovision.com
           </a>
           .
         </p>

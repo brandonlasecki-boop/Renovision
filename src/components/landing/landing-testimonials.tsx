@@ -64,7 +64,7 @@ export function LandingTestimonials() {
           ))}
         </div>
 
-        <LandingTryCta />
+        <LandingTryCta placement="landing_testimonials" />
       </div>
     </section>
   );

@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+import { TryCtaLink } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -35,15 +34,16 @@ export function LandingFinalCta() {
               choose—no spam, no pressure.
             </p>
             <div className="mt-10">
-              <Link
+              <TryCtaLink
+                placement="landing_final_cta"
                 href="/try"
                 className={cn(
                   buttonVariants({ size: "lg" }),
                   "h-12 bg-renovision-navy px-10 text-base font-semibold text-white shadow-lg shadow-renovision-navy/25 transition hover:bg-renovision-navy/90",
                 )}
               >
-                See My Bathroom Remodel
-              </Link>
+                See a Preview of My Bathroom Remodel
+              </TryCtaLink>
             </div>
             <p className="mt-5 text-xs leading-relaxed text-muted-foreground sm:text-sm">
               No cost to try. No contractor outreach unless you opt in.

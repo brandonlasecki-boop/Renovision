@@ -633,8 +633,12 @@ export function HomeownerTryClient({
             <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
           ) : (
             <>
-              <h1 className="text-balance text-3xl font-semibold tracking-tight">See your bathroom remodel before you build it</h1>
-              <p className="text-sm text-muted-foreground">Choose a style, upload your bathroom, and preview your remodel in minutes.</p>
+              <h1 className="text-balance text-3xl font-semibold tracking-tight">
+                See a Preview of Your Bathroom Remodel
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Pick a style, upload a photo, and see a realistic preview in minutes. No signup required.
+              </p>
               <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
             </>
           )}

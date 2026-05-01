@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { RenovisionLogo } from "@/components/landing/renovision-logo";
+import { TryCtaLink } from "@/components/landing/try-cta-link";
 
 export function LandingFooter() {
   return (
@@ -16,12 +17,13 @@ export function LandingFooter() {
           className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm"
           aria-label="Footer"
         >
-          <Link
+          <TryCtaLink
+            placement="landing_footer"
             href="/try"
             className="font-semibold text-renovision-navy transition-colors hover:text-renovision-navy/80 dark:text-renovision-orange dark:hover:text-renovision-orange/90"
           >
-            See my bathroom remodel
-          </Link>
+            Start free preview
+          </TryCtaLink>
           <Link
             href="/privacy"
             className="text-muted-foreground transition-colors hover:text-foreground"

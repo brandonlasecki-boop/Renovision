@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import logoTransPng from "../../../Images/logo_trans.png";
+
 /**
  * Prefer `public/renovision-looping-logo.webm`: VP9 WebM with a green plate, keyed out on canvas over the photo.
  *
@@ -11,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 const LOADER_VIDEO_SRC_CHAIN = ["/renovision-looping-logo.webm"] as const;
 
-const STATIC_LOGO_PNG_SRC = "/renovision-logo.png";
+const STATIC_LOGO_PNG_SRC = logoTransPng.src;
 
 /** Cap device pixel ratio for the keyed canvas (higher = sharper logo on HiDPI). */
 const LOADER_CANVAS_MAX_DPR = 3;

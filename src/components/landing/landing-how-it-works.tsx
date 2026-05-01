@@ -84,7 +84,7 @@ export function LandingHowItWorks() {
           </div>
         </div>
 
-        <LandingTryCta align="left" />
+        <LandingTryCta align="left" placement="landing_how_it_works" />
       </div>
     </section>
   );

@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export const metadata = {
-  title: "Try your remodel preview",
+  title: "Preview your bathroom remodel",
 };
 
 export default async function RenovisionTryPage({

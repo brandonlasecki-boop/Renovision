@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { RenovisionLogo } from "@/components/landing/renovision-logo";
+import { TryCtaLink } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
 import { signOut } from "@/lib/actions/auth";
@@ -84,15 +85,17 @@ export async function LandingHeader() {
                 Log In
               </Link>
             )}
-            <Link
+            <TryCtaLink
+              placement="landing_header"
               href="/try"
               className={cn(
                 buttonVariants({ size: "sm" }),
                 "max-w-[10.5rem] whitespace-normal px-2.5 text-center text-[11px] font-semibold leading-tight sm:max-w-none sm:px-4 sm:text-sm sm:leading-none",
               )}
             >
-              See My Bathroom Remodel
-            </Link>
+              <span className="sm:hidden">Start preview</span>
+              <span className="hidden sm:inline">See a Preview of My Bathroom Remodel</span>
+            </TryCtaLink>
           </div>
         </div>
       </div>

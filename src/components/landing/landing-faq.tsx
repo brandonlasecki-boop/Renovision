@@ -66,7 +66,7 @@ export function LandingFaq() {
           ))}
         </div>
 
-        <LandingTryCta />
+        <LandingTryCta placement="landing_faq" />
       </div>
     </section>
   );

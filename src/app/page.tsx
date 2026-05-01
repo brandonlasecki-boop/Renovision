@@ -1,3 +1,4 @@
+import { LandingContact } from "@/components/landing/landing-contact";
 import { LandingFaq } from "@/components/landing/landing-faq";
 import { LandingFinalCta } from "@/components/landing/landing-final-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
@@ -18,6 +19,7 @@ export default function HomePage() {
         <LandingWhy />
         <LandingTestimonials />
         <LandingFaq />
+        <LandingContact />
         <LandingFinalCta />
       </main>
       <LandingFooter />

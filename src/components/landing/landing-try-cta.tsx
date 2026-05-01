@@ -1,14 +1,16 @@
-import Link from "next/link";
-
+import { TryCtaLink } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
+import type { TryCtaPlacement } from "@/lib/analytics/try-cta";
 import { cn } from "@/lib/utils";
 
 export function LandingTryCta({
   className,
   align = "center",
+  placement,
 }: {
   className?: string;
   align?: "center" | "left";
+  placement: TryCtaPlacement;
 }) {
   return (
     <div
@@ -24,15 +26,16 @@ export function LandingTryCta({
         Upload your bathroom photo, see a realistic remodel, and connect with a contractor only when you&apos;re ready—no
         obligation.
       </p>
-      <Link
+      <TryCtaLink
+        placement={placement}
         href="/try"
         className={cn(
           buttonVariants({ size: "lg" }),
           "mt-5 inline-flex h-12 bg-renovision-navy px-8 text-base font-semibold text-white shadow-md shadow-renovision-navy/15 transition hover:bg-renovision-navy/90",
         )}
       >
-        See My Bathroom Remodel
-      </Link>
+        See a Preview of My Bathroom Remodel
+      </TryCtaLink>
     </div>
   );
 }
