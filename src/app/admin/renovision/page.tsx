@@ -98,7 +98,13 @@ function MetricCard({
 
 function trendMetric(
   p: RenovisionTrendPoint,
-  keyField: "anonymousSessions" | "firstMockups" | "signups" | "remodelerRequests",
+  keyField:
+    | "anonymousSessions"
+    | "firstMockups"
+    | "signups"
+    | "remodelerRequests"
+    | "websiteViews"
+    | "tryViews",
 ): number {
   return p[keyField];
 }
@@ -109,32 +115,56 @@ function TrendBars({
   colorClass,
 }: {
   points: RenovisionTrendPoint[];
-  keyField: "anonymousSessions" | "firstMockups" | "signups" | "remodelerRequests";
+  keyField:
+    | "anonymousSessions"
+    | "firstMockups"
+    | "signups"
+    | "remodelerRequests"
+    | "websiteViews"
+    | "tryViews";
   colorClass: string;
 }) {
   const vals = points.map((p) => trendMetric(p, keyField));
-  const max = Math.max(1, ...vals);
+  const maxVal = vals.length ? Math.max(...vals) : 0;
+
   return (
-    <div className="flex h-40 items-end gap-0.5 rounded-lg bg-muted/20 px-1 pb-1 pt-3 sm:gap-1">
-      {points.map((p) => {
-        const v = trendMetric(p, keyField);
-        const h = Math.round((v / max) * 100);
-        return (
-          <div key={p.key} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+    <div className="rounded-lg bg-muted/20 px-1 py-2 sm:px-2">
+      <div className="flex gap-0.5 sm:gap-1">
+        {points.map((p) => {
+          const v = trendMetric(p, keyField);
+          const title = `${p.label}: ${v}`;
+          const pctRaw = maxVal <= 0 ? 0 : (v / maxVal) * 100;
+          /** When every day ties (common for deduped view counts), bars stay equal — the number above is the source of truth. */
+          const barPct = v === 0 ? 0 : Math.max(pctRaw, 6);
+          return (
             <div
-              className={cn(
-                "w-full max-w-[32px] rounded-t-md shadow-sm transition-transform hover:scale-[1.02]",
-                colorClass,
-              )}
-              style={{ height: `${Math.max(6, h)}%`, minHeight: "4px" }}
-              title={`${p.label}: ${v}`}
-            />
-            <span className="hidden max-w-full truncate text-center text-[10px] font-medium text-muted-foreground sm:block">
-              {p.label}
-            </span>
-          </div>
-        );
-      })}
+              key={p.key}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1"
+              title={title}
+            >
+              <span className="flex h-4 shrink-0 items-center text-[10px] font-semibold tabular-nums leading-none text-foreground">
+                {v}
+              </span>
+              <div className="relative h-32 w-full">
+                <div
+                  className={cn(
+                    "absolute bottom-0 left-1/2 w-[88%] max-w-[38px] -translate-x-1/2 rounded-t-md shadow-sm transition-transform hover:scale-[1.02]",
+                    v === 0 ? "bg-muted-foreground/35" : colorClass,
+                  )}
+                  style={{
+                    height: v === 0 ? "3px" : `${barPct}%`,
+                    maxHeight: "100%",
+                  }}
+                  aria-hidden
+                />
+              </div>
+              <span className="max-w-full truncate text-center text-[10px] font-medium leading-tight text-muted-foreground">
+                {p.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -343,14 +373,14 @@ export default async function RenovisionAdminPage({
             title="Activity trends"
             description={
               range === "all"
-                ? "Last 12 months, one bar per month."
+                ? "Last 12 months, one bar per month. Home / Try views count tracked visits (once per browser per calendar day)."
                 : range === "7d"
-                  ? "Last 7 days, one bar per day."
-                  : "Last 30 days, one bar per day."
+                  ? "Last 7 days, one bar per day. Home / Try views count tracked visits (once per browser per calendar day)."
+                  : "Last 30 days, one bar per day. Home / Try views count tracked visits (once per browser per calendar day)."
             }
           >
             <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm ring-1 ring-black/[0.03] sm:p-6 dark:ring-white/[0.04]">
-              <div className="grid gap-8 lg:grid-cols-2">
+              <div className="grid gap-8 lg:grid-cols-2 xl:grid-cols-3">
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Guest sessions
@@ -372,6 +402,24 @@ export default async function RenovisionAdminPage({
                     Connect Me leads
                   </p>
                   <TrendBars points={trends} keyField="remodelerRequests" colorClass="bg-violet-500/75" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Home page views
+                  </p>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    `/` — one counted row per browser per day when the marketing page loads.
+                  </p>
+                  <TrendBars points={trends} keyField="websiteViews" colorClass="bg-sky-500/80" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Try page views
+                  </p>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    `/try` — one counted row per browser per day when the Try flow loads.
+                  </p>
+                  <TrendBars points={trends} keyField="tryViews" colorClass="bg-emerald-500/75" />
                 </div>
               </div>
             </div>

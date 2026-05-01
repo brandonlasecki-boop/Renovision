@@ -46,6 +46,78 @@ function formatMonthLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
+/** Start of calendar month UTC from `YYYY-MM` bucket key. */
+function utcMonthStartIso(yyyyMm: string): string {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return `${yyyyMm}-01T00:00:00.000Z`;
+  return new Date(Date.UTC(y, m - 1, 1)).toISOString();
+}
+
+/** Exclusive end of calendar month UTC from `YYYY-MM` (first instant of next month). */
+function utcMonthEndExclusiveIso(yyyyMm: string): string {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return yyyyMm;
+  return new Date(Date.UTC(y, m, 1)).toISOString();
+}
+
+async function attachWebsiteAndTryViewCounts(
+  svc: ReturnType<typeof createServiceClient>,
+  buckets: RenovisionTrendPoint[],
+  range: RenovisionAdminRange,
+): Promise<void> {
+  if (buckets.length === 0) return;
+
+  const firstKey = buckets[0].key;
+  const lastKey = buckets[buckets.length - 1].key;
+
+  let startIso: string;
+  let endExclusiveIso: string;
+
+  if (range === "all") {
+    startIso = utcMonthStartIso(firstKey);
+    endExclusiveIso = utcMonthEndExclusiveIso(lastKey);
+  } else {
+    startIso = `${firstKey}T00:00:00.000Z`;
+    const lastDay = new Date(`${lastKey}T00:00:00.000Z`);
+    lastDay.setUTCDate(lastDay.getUTCDate() + 1);
+    endExclusiveIso = lastDay.toISOString();
+  }
+
+  const rows: { occurred_at: string; event_type: string }[] = [];
+  let offset = 0;
+  const page = 1000;
+  for (;;) {
+    const { data, error } = await svc
+      .from("renovision_analytics_events")
+      .select("occurred_at, event_type")
+      .in("event_type", ["home_page_view", "try_page_view"])
+      .gte("occurred_at", startIso)
+      .lt("occurred_at", endExclusiveIso)
+      .order("occurred_at", { ascending: true })
+      .range(offset, offset + page - 1);
+    if (error) throw new Error(error.message);
+    const chunk = (data ?? []) as { occurred_at: string; event_type: string }[];
+    rows.push(...chunk);
+    if (chunk.length < page) break;
+    offset += page;
+  }
+
+  const bucketIndex = new Map(buckets.map((b, i) => [b.key, i]));
+
+  for (const row of rows) {
+    const iso = String(row.occurred_at ?? "");
+    const eventType = String(row.event_type ?? "");
+    const bucketKey = range === "all" ? iso.slice(0, 7) : iso.slice(0, 10);
+    const idx = bucketIndex.get(bucketKey);
+    if (idx === undefined) continue;
+    if (eventType === "home_page_view") {
+      buckets[idx].websiteViews += 1;
+    } else if (eventType === "try_page_view") {
+      buckets[idx].tryViews += 1;
+    }
+  }
+}
+
 export type RenovisionAdminOverview = {
   range: RenovisionAdminRange;
   fromIso: string | null;
@@ -78,6 +150,10 @@ export type RenovisionTrendPoint = {
   firstMockups: number;
   signups: number;
   remodelerRequests: number;
+  /** `home_page_view` analytics events in the bucket (see AttributionTracker; once per browser per calendar day on `/`). */
+  websiteViews: number;
+  /** `try_page_view` analytics events in the bucket (once per browser per calendar day on `/try`). */
+  tryViews: number;
 };
 
 export type RenovisionFunnelStep = {
@@ -452,8 +528,11 @@ export async function fetchRenovisionAdminTrends(range: RenovisionAdminRange): P
         firstMockups: (mockups ?? []).length,
         signups: (profs ?? []).length,
         remodelerRequests: (reqs ?? []).length,
+        websiteViews: 0,
+        tryViews: 0,
       });
     }
+    await attachWebsiteAndTryViewCounts(svc, buckets, range);
     return buckets;
   }
 
@@ -494,9 +573,12 @@ export async function fetchRenovisionAdminTrends(range: RenovisionAdminRange): P
       firstMockups: (mockups ?? []).length,
       signups: (profs ?? []).length,
       remodelerRequests: (reqs ?? []).length,
+      websiteViews: 0,
+      tryViews: 0,
     });
   }
 
+  await attachWebsiteAndTryViewCounts(svc, buckets, range);
   return buckets;
 }
 
@@ -709,7 +791,7 @@ export async function fetchRenovisionAdminProjectsTable(
   let q = svc
     .from("homeowner_try_projects")
     .select(
-      "id, created_at, room_kind, user_id, anonymous_session_id, converted_from_anon_session_id",
+      "id, created_at, room_kind, user_id, anonymous_session_id, converted_from_anon_session_id, before_storage_path",
     )
     .order("created_at", { ascending: false })
     .limit(500);
@@ -746,17 +828,26 @@ export async function fetchRenovisionAdminProjectsTable(
         .select("project_id, created_at, uploaded_image_url")
         .in("project_id", projectIds)
     : { data: [] };
-  const originalBeforePathByProject = new Map<string, { createdAt: string; storagePath: string }>();
+  const generationEarliestBeforeByProject = new Map<string, { createdAt: string; storagePath: string }>();
   for (const g of beforeGenerations ?? []) {
     const projectId = String((g as { project_id?: unknown }).project_id ?? "").trim();
     const storagePath = String((g as { uploaded_image_url?: unknown }).uploaded_image_url ?? "").trim();
     const createdAt = String((g as { created_at?: unknown }).created_at ?? "");
     if (!projectId || !storagePath) continue;
-    const prev = originalBeforePathByProject.get(projectId);
-    // Keep the earliest uploaded image as the original "before" photo.
+    const prev = generationEarliestBeforeByProject.get(projectId);
     if (!prev || createdAt < prev.createdAt) {
-      originalBeforePathByProject.set(projectId, { createdAt, storagePath });
+      generationEarliestBeforeByProject.set(projectId, { createdAt, storagePath });
     }
+  }
+  /** Prefer `homeowner_try_projects.before_storage_path`; else earliest generation `uploaded_image_url`. */
+  const originalBeforePathByProject = new Map<string, string>();
+  for (const p of projects ?? []) {
+    const pid = String(p.id);
+    const fromProject = String((p as { before_storage_path?: unknown }).before_storage_path ?? "").trim();
+    if (fromProject) originalBeforePathByProject.set(pid, fromProject);
+  }
+  for (const [pid, { storagePath }] of generationEarliestBeforeByProject) {
+    if (!originalBeforePathByProject.has(pid)) originalBeforePathByProject.set(pid, storagePath);
   }
 
   const { data: mockRows } = await svc
@@ -828,8 +919,8 @@ export async function fetchRenovisionAdminProjectsTable(
       pathsToSign.add(item.storagePath);
     }
   }
-  for (const before of originalBeforePathByProject.values()) {
-    pathsToSign.add(before.storagePath);
+  for (const path of originalBeforePathByProject.values()) {
+    pathsToSign.add(path);
   }
   for (const path of pathsToSign) {
     const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(path, 60 * 60);
@@ -886,7 +977,7 @@ export async function fetchRenovisionAdminProjectsTable(
       mockupCount: agg.total,
       initialCount: agg.initial,
       regenCount: agg.regen,
-      originalBeforeImageUrl: signedUrlByPath.get(originalBeforePathByProject.get(pid)?.storagePath ?? "") ?? null,
+      originalBeforeImageUrl: signedUrlByPath.get(originalBeforePathByProject.get(pid) ?? "") ?? null,
       previewImages: previewImagesByProject.get(pid) ?? [],
       remodelerRequested: remodelerProjects.has(pid),
     };

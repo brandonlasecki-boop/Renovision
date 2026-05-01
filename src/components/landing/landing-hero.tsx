@@ -56,14 +56,18 @@ export function LandingHero() {
             ))}
           </ul>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground sm:text-sm">
-            Contractor matching is optional. Explore your remodel first—no sales calls from us unless you ask to connect.
+            Contractor matching is optional. Explore your remodel first.
           </p>
         </div>
         <div className="space-y-3">
           <HeroMockupCard linkToTry className="mx-auto w-full max-w-lg lg:mx-0 lg:max-w-none" />
           <BoldTransformationPreview />
           <p className="text-center text-sm text-muted-foreground sm:text-left">
-            Example preview above—your result uses your own bathroom photo.
+            Tap a style to swap the after image, then drag the slider to compare. Your real preview on{" "}
+            <Link href="/try" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+              /try
+            </Link>{" "}
+            uses your own photo.
           </p>
         </div>
       </div>

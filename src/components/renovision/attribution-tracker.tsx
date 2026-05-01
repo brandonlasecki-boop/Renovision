@@ -3,10 +3,15 @@
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { parseAttributionParams, saveAttribution } from "@/lib/renovision/attribution";
-import { captureHomePageVisitAction, captureRenovisionAttributionAction } from "@/lib/actions/homeowner-try";
+import {
+  captureHomePageVisitAction,
+  captureRenovisionAttributionAction,
+  captureTryPageVisitAction,
+} from "@/lib/actions/homeowner-try";
 
 const ATTRIBUTION_SYNC_KEY = "renovision_attribution_synced_key";
 const HOME_VISIT_SYNC_PREFIX = "renovision_home_visit";
+const TRY_VISIT_SYNC_PREFIX = "renovision_try_visit";
 
 export function AttributionTracker() {
   const pathname = usePathname();
@@ -21,6 +26,15 @@ export function AttributionTracker() {
       if (!window.localStorage.getItem(visitKey)) {
         window.localStorage.setItem(visitKey, "1");
         void captureHomePageVisitAction();
+      }
+    }
+
+    if (window.location.pathname === "/try") {
+      const day = new Date().toISOString().slice(0, 10);
+      const visitKey = `${TRY_VISIT_SYNC_PREFIX}:${day}`;
+      if (!window.localStorage.getItem(visitKey)) {
+        window.localStorage.setItem(visitKey, "1");
+        void captureTryPageVisitAction();
       }
     }
 

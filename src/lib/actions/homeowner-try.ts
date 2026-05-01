@@ -1832,6 +1832,25 @@ export async function captureHomePageVisitAction(): Promise<{ ok: true } | { ok:
   }
 }
 
+export async function captureTryPageVisitAction(): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const viewer = await getViewerContext(true);
+    await trackTryEvent({
+      eventType: "try_page_view",
+      userId: viewer.userId,
+      anonymousSessionId: viewer.anonymousSessionId,
+      projectId: null,
+      metadata: {},
+    });
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not track Try page visit.",
+    };
+  }
+}
+
 export async function loadHomeownerTryPageState(): Promise<HomeownerTryPageState> {
   try {
     const { userEmail, anonymousSessionId } = await getViewerContext(false);

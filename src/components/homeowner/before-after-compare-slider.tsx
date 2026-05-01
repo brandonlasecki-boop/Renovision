@@ -6,14 +6,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type BeforeAfterCompareSliderProps = {
   beforeUrl: string;
   afterUrl: string;
+  /** Omit thumbnail row below the slider for tighter layouts (e.g. marketing hero). */
+  compact?: boolean;
+  /** Set when images are above-the-fold (hero/LCP). */
+  imagePriority?: boolean;
 };
 
 /**
  * Full-width before/after: drag on the image or use the range control to reveal the remodel (after)
  * under the original (before). Pointer capture supports one-finger drag on phones.
- * Below the range control, side-by-side thumbnails show full before and after (clear on narrow screens).
+ * Below the range control, side-by-side thumbnails show full before and after (unless `compact`).
  */
-export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCompareSliderProps) {
+export function BeforeAfterCompareSlider({
+  beforeUrl,
+  afterUrl,
+  compact = false,
+  imagePriority = false,
+}: BeforeAfterCompareSliderProps) {
   const [pct, setPct] = useState(50);
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: "Before" | "After" } | null>(
     null,
@@ -21,7 +30,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileAspectRatio, setMobileAspectRatio] = useState<number>(4 / 3);
   const trackRef = useRef<HTMLDivElement>(null);
-  const imageFitClass = isMobileViewport ? "object-cover" : "object-contain";
+  const imageFitClass = compact ? "object-cover" : isMobileViewport ? "object-cover" : "object-contain";
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -70,10 +79,14 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
   };
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? "space-y-2" : "space-y-3"}>
       <div
         ref={trackRef}
-        className="relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
+        className={
+          compact
+            ? "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[16/11] sm:min-h-[14rem]"
+            : "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
+        }
         style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
         onDoubleClick={() => setFullscreenImage({ src: pct < 50 ? beforeUrl : afterUrl, label: pct < 50 ? "Before" : "After" })}
       >
@@ -83,9 +96,9 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           fill
           className={`pointer-events-none ${imageFitClass}`}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
-          quality={75}
-          priority={false}
-          loading="lazy"
+          quality={compact ? 82 : 75}
+          priority={imagePriority}
+          loading={imagePriority ? undefined : "lazy"}
           draggable={false}
         />
         <div
@@ -98,9 +111,9 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
             fill
             className={imageFitClass}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
-            quality={75}
-            priority={false}
-            loading="lazy"
+            quality={compact ? 82 : 75}
+            priority={imagePriority}
+            loading={imagePriority ? undefined : "lazy"}
             draggable={false}
           />
         </div>
@@ -142,6 +155,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
         />
         <span className="text-xs text-muted-foreground">After</span>
       </div>
+      {!compact ? (
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
@@ -186,6 +200,7 @@ export function BeforeAfterCompareSlider({ beforeUrl, afterUrl }: BeforeAfterCom
           </span>
         </button>
       </div>
+      ) : null}
       {fullscreenImage ? (
         <div
           className="fixed inset-0 z-[130] flex items-center justify-center bg-black/90 p-3 sm:p-6"

@@ -656,15 +656,25 @@ export function HomeownerTryClient({
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {stylesToRender.map((style) => (
-                <article key={style.id} className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-                  <div className="relative aspect-[4/3] bg-muted">
+                <article
+                  key={style.id}
+                  className={[
+                    "group overflow-hidden rounded-2xl border bg-card shadow-sm transition-[border-color,box-shadow,transform,ring] duration-200 ease-out",
+                    "hover:-translate-y-0.5 hover:border-renovision-orange/55 hover:shadow-lg hover:shadow-renovision-navy/12",
+                    "focus-within:-translate-y-0.5 focus-within:border-renovision-orange/60 focus-within:shadow-lg focus-within:shadow-renovision-navy/12 focus-within:ring-2 focus-within:ring-renovision-orange/30 focus-within:ring-offset-2 focus-within:ring-offset-background",
+                    style.id === "spa_retreat"
+                      ? "border-renovision-orange/35 ring-1 ring-renovision-orange/20"
+                      : "border-border/80",
+                  ].join(" ")}
+                >
+                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
                     {style.adminOnly ? (
                       <span className="absolute left-3 top-3 z-10 rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
                         Admin preview
                       </span>
                     ) : null}
                     {style.id === "spa_retreat" ? (
-                      <span className="absolute left-3 top-3 z-10 rounded-full bg-renovision-orange px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+                      <span className="absolute left-3 top-3 z-10 rounded-full bg-renovision-orange px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm ring-2 ring-white/30">
                         Most Popular
                       </span>
                     ) : null}
@@ -673,7 +683,7 @@ export function HomeownerTryClient({
                         src={afterSpaImage}
                         alt="Spa Retreat bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : style.id === "bold_modern" ? (
@@ -681,7 +691,7 @@ export function HomeownerTryClient({
                         src={afterBoldImage}
                         alt="Bold Modern bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : style.id === "luxury_escape" ? (
@@ -689,7 +699,7 @@ export function HomeownerTryClient({
                         src={afterLuxuryImage}
                         alt="Luxury Escape bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : style.id === "clean_refresh" ? (
@@ -697,7 +707,7 @@ export function HomeownerTryClient({
                         src={afterCleanImage}
                         alt="Clean Refresh bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : style.id === "warm_minimalist" ? (
@@ -705,7 +715,7 @@ export function HomeownerTryClient({
                         src={afterWarmImage}
                         alt="Warm Minimalist bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : style.id === "coastal_beach_house" ? (
@@ -713,7 +723,7 @@ export function HomeownerTryClient({
                         src={afterCleanImage}
                         alt="Coastal Beach House bathroom inspiration"
                         fill
-                        className="object-cover"
+                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
                         sizes="(max-width: 1024px) 100vw, 33vw"
                       />
                     ) : (
@@ -721,12 +731,16 @@ export function HomeownerTryClient({
                         Bathroom inspiration
                       </div>
                     )}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/80 via-black/45 to-transparent px-4 pb-3 pt-14 sm:pt-16">
+                      <p className="line-clamp-2 min-w-0 text-lg font-semibold leading-tight text-white drop-shadow-md">
+                        {displayStyleName(style.id, style.name)}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-white/90 drop-shadow-md">
+                        {style.subtitle}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-2 p-4">
-                    <p className="min-w-0 truncate text-lg font-semibold leading-tight">
-                      {displayStyleName(style.id, style.name)}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{style.subtitle}</p>
+                  <div className="p-3 sm:p-4">
                     {quickStyleSwitchMode && generation ? (
                       <form action={regenAction}>
                         <input type="hidden" name="generation_id" value={generation.generationId} />
