@@ -134,20 +134,103 @@ async function listGuestTryProjectsAsCards(): Promise<SavedProjectCard[]> {
   return out;
 }
 
-/** Signed-in users: saved-project rows. Guests: active try projects for this browser session. */
+/**
+ * Signed-in try completions live on `homeowner_try_projects` / `bathroom_generations` before the user
+ * taps “Save My Project”. Mirror guest discovery but keyed by `user_id`.
+ */
+async function listSignedInTryProjectsAsCards(
+  userId: string,
+  excludeProjectIds: Set<string>,
+): Promise<SavedProjectCard[]> {
+  const svc = createServiceClient();
+
+  const [{ data: linkedProjects }, { data: userGenRows }] = await Promise.all([
+    svc.from("homeowner_try_projects").select("id").eq("user_id", userId),
+    svc.from("bathroom_generations").select("project_id").eq("user_id", userId),
+  ]);
+
+  const projectIds = new Set<string>();
+  for (const row of linkedProjects ?? []) {
+    projectIds.add(String(row.id));
+  }
+  for (const row of userGenRows ?? []) {
+    const pid = row.project_id != null ? String(row.project_id) : "";
+    if (pid) projectIds.add(pid);
+  }
+
+  for (const id of excludeProjectIds) {
+    projectIds.delete(id);
+  }
+
+  if (projectIds.size === 0) return [];
+
+  const ids = [...projectIds];
+  const { data: projects } = await svc
+    .from("homeowner_try_projects")
+    .select("id, created_at")
+    .in("id", ids)
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  const out: SavedProjectCard[] = [];
+  for (const p of projects ?? []) {
+    const projectId = String(p.id);
+    const { data: gen } = await svc
+      .from("bathroom_generations")
+      .select("id, estimate_min, estimate_max, selected_style, generated_image_url")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!gen?.id) continue;
+
+    const genPath = String(gen.generated_image_url ?? "").trim();
+    let mockupUrl: string | null = null;
+    if (genPath) {
+      const signed = await svc.storage.from(PHOTOS_BUCKET).createSignedUrl(genPath, 60 * 60);
+      mockupUrl = signed.data?.signedUrl ?? null;
+    }
+
+    const styleId = resolveBathroomStyleIdFromGeneration(gen.selected_style);
+    const styleMeta = getBathroomStyleById(styleId);
+    const displayName = styleMeta?.name ?? String(gen.selected_style ?? "Remodel preview");
+
+    out.push({
+      id: `try:${projectId}`,
+      projectId,
+      generationId: String(gen.id),
+      projectName: displayName,
+      selectedStyle: gen.selected_style ? String(gen.selected_style) : null,
+      estimateMin: gen.estimate_min == null ? null : Number(gen.estimate_min),
+      estimateMax: gen.estimate_max == null ? null : Number(gen.estimate_max),
+      createdAt: String(p.created_at),
+      mockupUrl,
+    });
+  }
+  return out;
+}
+
+/** Signed-in: saved rows plus try projects not yet in `renovision_saved_projects`. Guests: try projects for this browser. */
 export async function listProjectsForProjectsPage(): Promise<{
-  rows: Array<{ card: SavedProjectCard; isGuest: boolean }>;
+  rows: Array<{ card: SavedProjectCard; isGuest: boolean; isSavedRow: boolean }>;
 }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (user) {
-    const cards = await listViewerSavedProjects();
-    return { rows: cards.map((card) => ({ card, isGuest: false })) };
+    const saved = await listViewerSavedProjects();
+    const savedProjectIds = new Set(saved.map((c) => c.projectId));
+    const tryCards = await listSignedInTryProjectsAsCards(user.id, savedProjectIds);
+    const rows = [
+      ...saved.map((card) => ({ card, isGuest: false, isSavedRow: true as const })),
+      ...tryCards.map((card) => ({ card, isGuest: false, isSavedRow: false as const })),
+    ];
+    rows.sort((a, b) => new Date(b.card.createdAt).getTime() - new Date(a.card.createdAt).getTime());
+    return { rows };
   }
   const cards = await listGuestTryProjectsAsCards();
-  return { rows: cards.map((card) => ({ card, isGuest: true })) };
+  return { rows: cards.map((card) => ({ card, isGuest: true, isSavedRow: false as const })) };
 }
 
 export type SavedProjectDetail = {

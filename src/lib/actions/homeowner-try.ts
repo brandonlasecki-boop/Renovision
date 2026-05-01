@@ -1688,6 +1688,7 @@ const QUALITY_RESCUE_PROMPT_WET_ZONE = [
 /**
  * @param allowCookieMutation - Must be `false` when called from a Server Component (e.g. `/try` page load).
  * Next.js only allows `cookies().set` inside Server Actions / Route Handlers, not during RSC render.
+ * When `true`, ensures the anonymous session row exists before DB writes; read-only callers skip that upsert.
  */
 /** Blocks generation/regeneration when style is admin-preview-only and viewer is not admin. */
 async function gateAdminOnlyStyle(
@@ -1718,7 +1719,7 @@ async function getViewerContext(allowCookieMutation: boolean) {
       ? await getOrCreateRenovisionAnonymousSessionId()
       : await getRenovisionAnonymousSessionIdFromCookie();
 
-  if (anonymousSessionId) {
+  if (anonymousSessionId && allowCookieMutation) {
     await ensureRenovisionAnonymousSessionRow(anonymousSessionId);
   }
 

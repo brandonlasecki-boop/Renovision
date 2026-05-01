@@ -63,12 +63,18 @@ export function LandingScrollTransformationSection() {
     const tick = () => {
       const r = el.getBoundingClientRect();
       const vh = window.innerHeight || 1;
-      const start = vh * 0.9;
-      const end = vh * 0.34;
-      const span = Math.max(1, start - end);
-      const raw = (start - r.top) / span;
+      /**
+       * Scrub maps section `getBoundingClientRect().top` while scrolling:
+       * - Lower `scrubStart` = wipe starts later (section must move farther up).
+       * - Lower `scrubEnd` + wider span = more scroll for a full 0→1 wipe (slower).
+       */
+      const scrubStart = vh * 0.38;
+      const scrubEnd = vh * 0.05;
+      const span = Math.max(1, scrubStart - scrubEnd);
+      const raw = r.top <= scrubStart ? (scrubStart - r.top) / span : 0;
       const clamped = Math.min(1, Math.max(0, raw));
-      const eased = clamped * clamped * (3 - 2 * clamped);
+      /** Slightly ease-in-out so the middle of the wipe doesn’t feel rushed vs scroll. */
+      const eased = clamped * clamped * clamped * (clamped * (clamped * 6 - 15) + 10);
       setScrub(eased);
     };
 

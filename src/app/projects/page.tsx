@@ -45,8 +45,12 @@ export default async function MyProjectsPage() {
           <div className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
             {user ? (
               <p>
-                No saved projects yet. Generate a bathroom mockup on the try page, then use{" "}
-                <span className="font-medium text-foreground">Save My Project</span> to keep a copy here.
+                No projects yet. Complete a bathroom preview on{" "}
+                <Link href="/try" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                  Try your remodel
+                </Link>
+                — it will appear here. Use <span className="font-medium text-foreground">Save My Project</span> on
+                the result to add a named copy to this list.
               </p>
             ) : (
               <p>
@@ -60,7 +64,7 @@ export default async function MyProjectsPage() {
           </div>
         ) : (
           <div className="grid gap-3">
-            {rows.map(({ card: p, isGuest }) => (
+            {rows.map(({ card: p, isGuest, isSavedRow }) => (
               <article key={p.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
@@ -80,7 +84,7 @@ export default async function MyProjectsPage() {
                       <p className="text-xs text-muted-foreground">Updated {new Date(p.createdAt).toLocaleDateString()}</p>
                       {isGuest ? (
                         <p className="text-[11px] text-muted-foreground">On this device — sign in to save to your account.</p>
-                      ) : (
+                      ) : isSavedRow ? (
                         <form action={renameSavedProjectAction} className="pt-1">
                           <input type="hidden" name="saved_project_id" value={p.id} />
                           <input
@@ -97,6 +101,10 @@ export default async function MyProjectsPage() {
                             Save
                           </button>
                         </form>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Open the preview and use Save My Project to add a custom name.
+                        </p>
                       )}
                     </div>
                   </div>

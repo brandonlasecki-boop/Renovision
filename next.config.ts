@@ -2,9 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    /** Large quotes + JSON snapshot for mockup-only regenerate (FormData). */
+    /**
+     * Try flow POSTs the bathroom photo via Server Action (up to 20MB after client checks).
+     * Default 1MB / a too-low limit causes failed requests (often “page couldn’t load” on mobile) before the action runs.
+     */
     serverActions: {
-      bodySizeLimit: "4mb",
+      bodySizeLimit: "25mb",
     },
   },
   images: {

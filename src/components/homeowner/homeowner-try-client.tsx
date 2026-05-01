@@ -32,6 +32,11 @@ import {
   getTryPageBathroomStyles,
   type BathroomStyleId,
 } from "@/lib/homeowner-try/bathroom-styles";
+import {
+  compressTryPhotoForUpload,
+  isLikelyHeicUpload,
+  MAX_TRY_SERVER_ACTION_UPLOAD_BYTES,
+} from "@/lib/homeowner-try/compress-client-upload";
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
 import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
@@ -98,12 +103,6 @@ function isLikelyMobileBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
-}
-
-function isLikelyHeic(file: File): boolean {
-  const mime = (file.type || "").toLowerCase();
-  const name = (file.name || "").toLowerCase();
-  return mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
 }
 
 /** Left side of compare — display only; does not change which mockup edits/regen use. */
@@ -297,7 +296,29 @@ export function HomeownerTryClient({
   const bathroomCameraInputRef = useRef<HTMLInputElement>(null);
   const bathroomLibraryInputRef = useRef<HTMLInputElement>(null);
 
-  const [generateState, generateAction, generatePending] = useActionState(generateBathroomMockupAction, undefined);
+  async function compressThenGenerate(
+    prev: Awaited<ReturnType<typeof generateBathroomMockupAction>> | undefined,
+    formData: FormData,
+  ) {
+    const raw = formData.get("bathroom_photo");
+    if (
+      raw instanceof File &&
+      raw.size > MAX_TRY_SERVER_ACTION_UPLOAD_BYTES &&
+      !isLikelyHeicUpload(raw)
+    ) {
+      try {
+        formData.set("bathroom_photo", await compressTryPhotoForUpload(raw));
+      } catch {
+        return {
+          error:
+            "Could not prepare your photo for upload. Try a smaller JPG or PNG, or retake at lower resolution.",
+        };
+      }
+    }
+    return generateBathroomMockupAction(prev, formData);
+  }
+
+  const [generateState, generateAction, generatePending] = useActionState(compressThenGenerate, undefined);
   const [regenState, regenAction, regenPending] = useActionState(regenerateBathroomMockupAction, undefined);
   const [versionState, versionAction, versionPending] = useActionState(selectTryMockupVersionAction, undefined);
   const [connectState, connectAction] = useActionState(trackConnectClickedAction, undefined);
@@ -863,11 +884,13 @@ export function HomeownerTryClient({
                   const objectUrl = URL.createObjectURL(file);
                   setLoaderBeforeBlob(objectUrl);
                   /** HEIC/HEIF: browsers often can’t decode for inline preview; server converts with Sharp. */
-                  if (isLikelyHeic(file)) {
+                  if (isLikelyHeicUpload(file)) {
                     setFirstUploadPreviewUrl(null);
                     toast.message("Photo selected", {
                       description:
-                        "Apple HEIC/HEIF uploads work — inline preview may be skipped until generation finishes.",
+                        file.size > MAX_TRY_SERVER_ACTION_UPLOAD_BYTES
+                          ? "HEIC/HEIF works — preview may be skipped. If upload fails, export as JPEG in Photos (large files hit hosting limits)."
+                          : "Apple HEIC/HEIF uploads work — inline preview may be skipped until generation finishes.",
                     });
                     return;
                   }
