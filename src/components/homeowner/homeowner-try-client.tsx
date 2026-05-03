@@ -1047,20 +1047,26 @@ export function HomeownerTryClient({
                   (generation.improveDesignSuggestions?.length ?? 0) > 0 ? (
                     <div className="space-y-4">
                       {(generation.saveMoneySuggestions?.length ?? 0) > 0 ? (
-                        <div className="overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.07] to-muted/15">
-                          <div className="border-b border-emerald-500/15 px-3 py-3 sm:px-4">
-                            <p className="text-sm font-semibold text-foreground">Lower your cost</p>
-                            {saveMoneyAggregate ? (
-                              <p className="mt-1 text-xs font-medium leading-relaxed text-emerald-950 dark:text-emerald-200/95">
-                                You could save up to {formatUsdBand(saveMoneyAggregate.low, saveMoneyAggregate.high)}
-                              </p>
-                            ) : (
-                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                                Tap swaps below to trim typical job cost.
-                              </p>
-                            )}
-                          </div>
-                          <div className="space-y-3 p-3 sm:p-4">
+                        <details className="group overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.07] to-muted/15">
+                          <summary className="flex cursor-pointer list-none items-start justify-between gap-2 px-3 py-3 outline-offset-2 marker:content-none transition-colors hover:bg-emerald-500/[0.06] sm:px-4 [&::-webkit-details-marker]:hidden">
+                            <div className="min-w-0 flex-1 text-left">
+                              <p className="text-sm font-semibold text-foreground">Lower your cost</p>
+                              {saveMoneyAggregate ? (
+                                <p className="mt-1 text-xs font-medium leading-relaxed text-emerald-950 dark:text-emerald-200/95">
+                                  You could save up to {formatUsdBand(saveMoneyAggregate.low, saveMoneyAggregate.high)}
+                                </p>
+                              ) : (
+                                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                  Tap swaps below to trim typical job cost.
+                                </p>
+                              )}
+                            </div>
+                            <ChevronDown
+                              className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                              aria-hidden
+                            />
+                          </summary>
+                          <div className="space-y-3 border-t border-emerald-500/15 p-3 sm:p-4">
                             {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
                               const impact = formatTweakImpactBand(row);
                               return (
@@ -1099,22 +1105,28 @@ export function HomeownerTryClient({
                               </p>
                             ) : null}
                           </div>
-                        </div>
+                        </details>
                       ) : null}
 
                       {(generation.improveDesignSuggestions?.length ?? 0) > 0 ? (
-                        <div className="overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-b from-amber-500/[0.07] to-muted/15">
-                          <div className="border-b border-amber-500/15 px-3 py-3 sm:px-4">
-                            <p className="text-sm font-semibold text-foreground">Upgrade your design</p>
-                            <p className="mt-1 text-xs font-medium leading-relaxed text-amber-950 dark:text-amber-200/95">
-                              Upgrade options available
-                              {improveDesignAggregate
-                                ? ` — about +${formatUsdBand(improveDesignAggregate.low, improveDesignAggregate.high)} if you picked every idea below`
-                                : ""}
-                              .
-                            </p>
-                          </div>
-                          <div className="space-y-3 p-3 sm:p-4">
+                        <details className="group overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-b from-amber-500/[0.07] to-muted/15">
+                          <summary className="flex cursor-pointer list-none items-start justify-between gap-2 px-3 py-3 outline-offset-2 marker:content-none transition-colors hover:bg-amber-500/[0.06] sm:px-4 [&::-webkit-details-marker]:hidden">
+                            <div className="min-w-0 flex-1 text-left">
+                              <p className="text-sm font-semibold text-foreground">Upgrade your design</p>
+                              <p className="mt-1 text-xs font-medium leading-relaxed text-amber-950 dark:text-amber-200/95">
+                                Upgrade options available
+                                {improveDesignAggregate
+                                  ? ` — about +${formatUsdBand(improveDesignAggregate.low, improveDesignAggregate.high)} if you picked every idea below`
+                                  : ""}
+                                .
+                              </p>
+                            </div>
+                            <ChevronDown
+                              className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                              aria-hidden
+                            />
+                          </summary>
+                          <div className="space-y-3 border-t border-amber-500/15 p-3 sm:p-4">
                             {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
                               const impact = formatTweakImpactBand(row);
                               return (
@@ -1153,7 +1165,7 @@ export function HomeownerTryClient({
                               </p>
                             ) : null}
                           </div>
-                        </div>
+                        </details>
                       ) : null}
                     </div>
                   ) : null}
