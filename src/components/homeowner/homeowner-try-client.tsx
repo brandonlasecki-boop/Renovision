@@ -162,8 +162,6 @@ export function HomeownerTryClient({
   const [storedAttribution, setStoredAttribution] = useState<RenovisionAttribution | null>(null);
   const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
   const uploadFormRef = useRef<HTMLFormElement>(null);
-  /** Set after mount so SSR HTML matches; enables camera-facing hint on phones without forcing desktop pickers. */
-  const [tryPhotoCapture, setTryPhotoCapture] = useState<"environment" | undefined>(undefined);
   /** Result step: show minimal “wow” first; reveal style, AI tweaks, cost, etc. after user opts in. */
   const [tryResultCustomizeOpen, setTryResultCustomizeOpen] = useState(false);
 
@@ -197,10 +195,6 @@ export function HomeownerTryClient({
 
   useEffect(() => {
     setStoredAttribution(getStoredAttribution());
-  }, []);
-
-  useEffect(() => {
-    if (isLikelyMobileBrowser()) setTryPhotoCapture("environment");
   }, []);
 
   useEffect(() => {
@@ -562,7 +556,6 @@ export function HomeownerTryClient({
                 name="bathroom_photo"
                 type="file"
                 accept="image/*"
-                capture={tryPhotoCapture}
                 required
                 aria-label="Bathroom photo to upload"
                 className="sr-only"
