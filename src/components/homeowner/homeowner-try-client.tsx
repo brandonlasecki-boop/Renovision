@@ -133,6 +133,13 @@ function shortTweakLine(text: string, maxChars = 78): string {
   return `${base}…`;
 }
 
+/** Short label for compare slider badges / range hints. */
+function compareBadgeLabel(text: string, maxChars = 26): string {
+  const t = text.trim();
+  if (t.length <= maxChars) return t;
+  return `${t.slice(0, maxChars - 1)}…`;
+}
+
 type TryMockupVersionRow = {
   id: string;
   label: string;
@@ -222,6 +229,9 @@ export function HomeownerTryClient({
   const uploadFormRef = useRef<HTMLFormElement>(null);
   /** Result step: show minimal “wow” first; reveal style, AI tweaks, cost, etc. after user opts in. */
   const [tryResultCustomizeOpen, setTryResultCustomizeOpen] = useState(false);
+  const [compareDesignsOpen, setCompareDesignsOpen] = useState(false);
+  const [compareLeftKey, setCompareLeftKey] = useState<string>("original");
+  const [compareRightKey, setCompareRightKey] = useState<string>("");
   const [saveTweakChecked, setSaveTweakChecked] = useState<Record<number, boolean>>({});
   const [designTweakChecked, setDesignTweakChecked] = useState<Record<number, boolean>>({});
 
@@ -572,6 +582,70 @@ export function HomeownerTryClient({
     return generation.uploadedImageUrl;
   }, [generation]);
 
+  useEffect(() => {
+    if (!generation) return;
+    if (!compareDesignsOpen) {
+      setCompareLeftKey("original");
+      setCompareRightKey(generation.activeMockupId);
+    }
+  }, [generation, compareDesignsOpen]);
+
+  useEffect(() => {
+    if (!generation || !compareDesignsOpen) return;
+    const leftOk =
+      compareLeftKey === "original" || generation.mockupVersions.some((v) => v.id === compareLeftKey);
+    const rightOk =
+      compareRightKey === "original" || generation.mockupVersions.some((v) => v.id === compareRightKey);
+    if (!leftOk) setCompareLeftKey("original");
+    if (!rightOk) setCompareRightKey(generation.activeMockupId);
+  }, [generation, compareDesignsOpen, compareLeftKey, compareRightKey]);
+
+  const effectiveCompareLeftKey = useMemo(() => {
+    if (!generation) return "original";
+    if (compareLeftKey === "original") return "original";
+    return generation.mockupVersions.some((v) => v.id === compareLeftKey) ? compareLeftKey : "original";
+  }, [generation, compareLeftKey]);
+
+  const effectiveCompareRightKey = useMemo(() => {
+    if (!generation) return "";
+    if (compareRightKey === "original") return "original";
+    if (compareRightKey && generation.mockupVersions.some((v) => v.id === compareRightKey)) return compareRightKey;
+    if (generation.mockupVersions.some((v) => v.id === generation.activeMockupId)) return generation.activeMockupId;
+    return generation.mockupVersions[0]?.id ?? generation.activeMockupId;
+  }, [generation, compareRightKey]);
+
+  const trySliderBeforeUrl = useMemo(() => {
+    if (!generation) return "";
+    if (!compareDesignsOpen) return beforeImageForCompare;
+    if (effectiveCompareLeftKey === "original") return generation.uploadedImageUrl;
+    return (
+      generation.mockupVersions.find((v) => v.id === effectiveCompareLeftKey)?.imageUrl ?? beforeImageForCompare
+    );
+  }, [generation, compareDesignsOpen, effectiveCompareLeftKey, beforeImageForCompare]);
+
+  const trySliderAfterUrl = useMemo(() => {
+    if (!generation) return "";
+    if (!compareDesignsOpen) return afterImageForDisplay;
+    if (effectiveCompareRightKey === "original") return generation.uploadedImageUrl;
+    return (
+      generation.mockupVersions.find((v) => v.id === effectiveCompareRightKey)?.imageUrl ?? afterImageForDisplay
+    );
+  }, [generation, compareDesignsOpen, effectiveCompareRightKey, afterImageForDisplay]);
+
+  const trySliderSideALabel = useMemo(() => {
+    if (!generation || !compareDesignsOpen) return "Before";
+    if (effectiveCompareLeftKey === "original") return "Original";
+    const row = generation.mockupVersions.find((v) => v.id === effectiveCompareLeftKey);
+    return compareBadgeLabel(row?.label ?? "Left");
+  }, [generation, compareDesignsOpen, effectiveCompareLeftKey]);
+
+  const trySliderSideBLabel = useMemo(() => {
+    if (!generation || !compareDesignsOpen) return "After";
+    if (effectiveCompareRightKey === "original") return "Original";
+    const row = generation.mockupVersions.find((v) => v.id === effectiveCompareRightKey);
+    return compareBadgeLabel(row?.label ?? "Right");
+  }, [generation, compareDesignsOpen, effectiveCompareRightKey]);
+
   const styleCardLabelById: Partial<Record<BathroomStyleId, string>> = {
     luxury_escape: "Modern Luxury",
   };
@@ -819,7 +893,88 @@ export function HomeownerTryClient({
               {versionState && "error" in versionState ? (
                 <p className="text-sm text-destructive">{versionState.error}</p>
               ) : null}
-              <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
+              <BeforeAfterCompareSlider
+                beforeUrl={trySliderBeforeUrl}
+                afterUrl={trySliderAfterUrl}
+                sideALabel={trySliderSideALabel}
+                sideBLabel={trySliderSideBLabel}
+              />
+              <div className="mx-auto w-full max-w-md space-y-3 pt-1">
+                {(generation.mockupVersions?.length ?? 0) === 0 ? null : !compareDesignsOpen ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-10 w-full rounded-xl text-sm font-semibold shadow-sm"
+                    onClick={() => {
+                      if (!generation) return;
+                      setCompareDesignsOpen(true);
+                      setCompareLeftKey("original");
+                      setCompareRightKey(generation.activeMockupId);
+                      trackEvent("try_compare_designs_open");
+                    }}
+                  >
+                    Compare Designs
+                  </Button>
+                ) : (
+                  <div className="rounded-xl border border-border/70 bg-muted/25 px-3 py-3 text-left shadow-sm sm:px-4">
+                    <p className="text-xs font-medium text-foreground">Comparison</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      Choose what appears on the left and right of the slider. Default is your original photo vs your
+                      latest preview.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="try-compare-left" className="text-xs font-medium text-foreground">
+                          Left image
+                        </Label>
+                        <select
+                          id="try-compare-left"
+                          value={effectiveCompareLeftKey}
+                          onChange={(e) => setCompareLeftKey(e.target.value)}
+                          disabled={versionPending}
+                          className="h-10 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-sm"
+                        >
+                          <option value="original">Original photo</option>
+                          {(generation.mockupVersions ?? []).map((v) => (
+                            <option key={`cmp-l-${v.id}`} value={v.id}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="try-compare-right" className="text-xs font-medium text-foreground">
+                          Right image
+                        </Label>
+                        <select
+                          id="try-compare-right"
+                          value={effectiveCompareRightKey}
+                          onChange={(e) => setCompareRightKey(e.target.value)}
+                          disabled={versionPending}
+                          className="h-10 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-sm"
+                        >
+                          <option value="original">Original photo</option>
+                          {(generation.mockupVersions ?? []).map((v) => (
+                            <option key={`cmp-r-${v.id}`} value={v.id}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3 h-9 w-full text-xs font-medium text-muted-foreground hover:text-foreground"
+                      onClick={() => setCompareDesignsOpen(false)}
+                    >
+                      Hide controls
+                    </Button>
+                  </div>
+                )}
+              </div>
               {!tryResultCustomizeOpen ? (
                 <div className="w-full space-y-3 pt-2">
                   <p className="text-balance text-center text-sm leading-relaxed text-muted-foreground sm:text-base">

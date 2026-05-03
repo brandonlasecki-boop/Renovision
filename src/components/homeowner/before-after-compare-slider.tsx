@@ -22,6 +22,9 @@ type BeforeAfterCompareSliderProps = {
   compareHint?: string | null;
   /** Initial slider position (0–100) when uncontrolled; ignored while {@link controlledPct} is set. Default 50. */
   initialSliderPct?: number;
+  /** Labels for the left / right side of the split (corners, range hints, thumbnails, fullscreen). Default Before / After. */
+  sideALabel?: string;
+  sideBLabel?: string;
   /** Merges into the root stack (e.g. `space-y-0` for tighter landing demos). */
   className?: string;
 };
@@ -41,15 +44,15 @@ export function BeforeAfterCompareSlider({
   hideRange = false,
   compareHint,
   initialSliderPct,
+  sideALabel = "Before",
+  sideBLabel = "After",
   className,
 }: BeforeAfterCompareSliderProps) {
   const [internalPct, setInternalPct] = useState(() =>
     initialSliderPct !== undefined ? initialSliderPct : 50,
   );
   const pct = controlledPct !== undefined ? controlledPct : internalPct;
-  const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: "Before" | "After" } | null>(
-    null,
-  );
+  const [fullscreenImage, setFullscreenImage] = useState<{ src: string; label: string } | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileAspectRatio, setMobileAspectRatio] = useState<number>(4 / 3);
   const imageFitClass = compact ? "object-cover" : isMobileViewport ? "object-cover" : "object-contain";
@@ -99,14 +102,14 @@ export function BeforeAfterCompareSlider({
             : () =>
                 setFullscreenImage({
                   src: pct > 50 ? afterUrl : beforeUrl,
-                  label: pct > 50 ? "After" : "Before",
+                  label: pct > 50 ? sideBLabel : sideALabel,
                 })
         }
       >
         {/* Same stacking as the bid mockup slider: before underneath, after clipped on top. */}
         <Image
           src={beforeUrl}
-          alt="Before remodel"
+          alt={`${sideALabel} (comparison)`}
           fill
           className={`pointer-events-none ${imageFitClass}`}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
@@ -121,7 +124,7 @@ export function BeforeAfterCompareSlider({
         >
           <Image
             src={afterUrl}
-            alt="After remodel"
+            alt={`${sideBLabel} (comparison)`}
             fill
             className={imageFitClass}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 1024px"
@@ -136,16 +139,16 @@ export function BeforeAfterCompareSlider({
           style={{ left: `${pct}%`, transform: "translateX(-50%)" }}
           aria-hidden
         />
-        <div className="pointer-events-none absolute bottom-2 left-3 z-20 rounded bg-black/55 px-2 py-1 text-xs font-medium text-white">
-          Before
+        <div className="pointer-events-none absolute bottom-2 left-3 z-20 max-w-[44%] truncate rounded bg-black/55 px-2 py-1 text-xs font-medium text-white">
+          {sideALabel}
         </div>
-        <div className="pointer-events-none absolute bottom-2 right-3 z-20 rounded bg-black/55 px-2 py-1 text-xs font-medium text-white">
-          After
+        <div className="pointer-events-none absolute bottom-2 right-3 z-20 max-w-[44%] truncate rounded bg-black/55 px-2 py-1 text-xs font-medium text-white">
+          {sideBLabel}
         </div>
       </div>
       {!hideRange ? (
         <div className="flex items-center gap-3 px-1">
-          <span className="text-xs text-muted-foreground">Before</span>
+          <span className="max-w-[28%] shrink-0 truncate text-xs text-muted-foreground">{sideALabel}</span>
           <input
             type="range"
             min={0}
@@ -156,9 +159,9 @@ export function BeforeAfterCompareSlider({
               setInternalPct(Number(e.target.value));
             }}
             className="h-2 min-w-0 flex-1 cursor-ew-resize accent-renovision-orange"
-            aria-label="Slide to compare before and after"
+            aria-label={`Slide to compare ${sideALabel} and ${sideBLabel}`}
           />
-          <span className="text-xs text-muted-foreground">After</span>
+          <span className="max-w-[28%] shrink-0 truncate text-right text-xs text-muted-foreground">{sideBLabel}</span>
         </div>
       ) : compareHint === null ? null : (
         <p className="mt-1 px-1 text-center text-[11px] leading-tight text-muted-foreground sm:text-xs">
@@ -171,12 +174,12 @@ export function BeforeAfterCompareSlider({
           type="button"
           className="relative m-0 w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm sm:aspect-[4/3]"
           style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
-          onClick={() => setFullscreenImage({ src: beforeUrl, label: "Before" })}
-          aria-label="Open before image fullscreen"
+          onClick={() => setFullscreenImage({ src: beforeUrl, label: sideALabel })}
+          aria-label={`Open ${sideALabel} image fullscreen`}
         >
           <Image
             src={beforeUrl}
-            alt="Before full preview"
+            alt={`${sideALabel} full preview`}
             fill
             className={imageFitClass}
             sizes="(max-width: 640px) 48vw, 360px"
@@ -184,20 +187,20 @@ export function BeforeAfterCompareSlider({
             loading="lazy"
             draggable={false}
           />
-          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
-            Before
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] max-w-[90%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            {sideALabel}
           </span>
         </button>
         <button
           type="button"
           className="relative m-0 w-full min-h-0 overflow-hidden rounded-lg border border-border/80 bg-muted text-left shadow-sm sm:aspect-[4/3]"
           style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
-          onClick={() => setFullscreenImage({ src: afterUrl, label: "After" })}
-          aria-label="Open after image fullscreen"
+          onClick={() => setFullscreenImage({ src: afterUrl, label: sideBLabel })}
+          aria-label={`Open ${sideBLabel} image fullscreen`}
         >
           <Image
             src={afterUrl}
-            alt="After full preview"
+            alt={`${sideBLabel} full preview`}
             fill
             className={imageFitClass}
             sizes="(max-width: 640px) 48vw, 360px"
@@ -205,8 +208,8 @@ export function BeforeAfterCompareSlider({
             loading="lazy"
             draggable={false}
           />
-          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
-            After
+          <span className="pointer-events-none absolute bottom-1.5 left-1.5 z-[1] max-w-[90%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white sm:text-xs">
+            {sideBLabel}
           </span>
         </button>
       </div>
@@ -233,7 +236,7 @@ export function BeforeAfterCompareSlider({
           >
             <Image
               src={fullscreenImage.src}
-              alt={`${fullscreenImage.label} remodel fullscreen`}
+              alt={`${fullscreenImage.label} fullscreen`}
               fill
               className="object-contain"
               sizes="100vw"
