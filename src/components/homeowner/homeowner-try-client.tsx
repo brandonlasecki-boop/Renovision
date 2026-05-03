@@ -9,11 +9,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { Camera, ChevronDown, Images } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,10 +28,8 @@ import {
   type TryGenerationViewState,
   type TryTweakSuggestion,
 } from "@/lib/actions/homeowner-try";
-import {
-  getTryPageBathroomStyles,
-  type BathroomStyleId,
-} from "@/lib/homeowner-try/bathroom-styles";
+import type { BathroomStyleId } from "@/lib/homeowner-try/bathroom-styles";
+import { LANDING_DEMO_BEFORE, LANDING_DEMO_STYLE_OPTIONS } from "@/components/landing/landing-demo-style-options";
 import {
   compressTryPhotoForUpload,
   isLikelyHeicUpload,
@@ -41,11 +39,7 @@ import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-co
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
 import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
 import { trackEvent, trackGoogleAdsLeadConversion } from "@/lib/analytics/google-ads";
-import afterBoldImage from "../../../Images/after_bold.png";
-import afterCleanImage from "../../../Images/after_clean.png";
-import afterLuxuryImage from "../../../Images/after_luxury.png";
-import afterSpaImage from "../../../Images/after_spa.png";
-import afterWarmImage from "../../../Images/after_warm.png";
+import { cn } from "@/lib/utils";
 
 const usd = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -55,6 +49,18 @@ const usd = new Intl.NumberFormat("en-US", {
 const MAX_SAFE_PREVIEW_BYTES = 8 * 1024 * 1024;
 /** Matches server `generateBathroomMockupAction` limit; server normalizes/resizes large photos. */
 const MAX_TRY_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+/** Post-preview style switches (original upload + new style). Order: Spa default first elsewhere. */
+const UPLOAD_TEASER_AFTER =
+  LANDING_DEMO_STYLE_OPTIONS.find((o) => o.id === "spa_retreat")?.after ?? LANDING_DEMO_STYLE_OPTIONS[0].after;
+
+const POST_RESULT_STYLE_PRESETS: { id: BathroomStyleId; label: string }[] = [
+  { id: "spa_retreat", label: "Spa" },
+  { id: "clean_refresh", label: "Clean" },
+  { id: "luxury_escape", label: "Luxury" },
+  { id: "bold_modern", label: "Bold" },
+  { id: "warm_minimalist", label: "Warm" },
+];
 
 /** Approximate shift to total job midpoint vs current estimate; from estimator JSON. */
 function formatTweakImpactBand(s: TryTweakSuggestion): string {
@@ -79,20 +85,6 @@ type TryMockupVersionRow = {
   storagePath: string;
   caption?: string | null;
 };
-
-/** Copy a picked `File` onto the real form `<input name="bathroom_photo">` (camera vs library use separate pickers). */
-function assignImageToFileInput(target: HTMLInputElement, file: File | undefined | null) {
-  if (!file) return;
-  try {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    target.files = dt.files;
-  } catch {
-    return;
-  }
-  /** One synthetic `change` avoids duplicate React handlers (camera/library helpers copy onto main input). */
-  target.dispatchEvent(new Event("change", { bubbles: true }));
-}
 
 /** Very large phone photos can crash mobile Chrome when decoded for client-side preview. */
 function previewAllowed(file: File | undefined | null): file is File {
@@ -223,25 +215,16 @@ export function HomeownerTryClient({
   autoSavedProject = false,
   startNewProject = false,
   startNewToken = "",
-  viewerIsAdmin = false,
 }: {
   initial: Exclude<HomeownerTryPageState, { ok: false }>;
   restoredGeneration?: TryGenerationViewState | null;
   autoSavedProject?: boolean;
   startNewProject?: boolean;
   startNewToken?: string;
-  /** When true, admin-only preview styles (e.g. Coastal Beach House) appear in the picker. */
-  viewerIsAdmin?: boolean;
 }) {
-  const bathroomStylesForTry = useMemo(
-    () => getTryPageBathroomStyles({ includeAdminOnly: viewerIsAdmin }),
-    [viewerIsAdmin],
-  );
-  const [selectedStyle, setSelectedStyle] = useState<BathroomStyleId | null>(null);
-  const [userDescription, setUserDescription] = useState("");
-  const [step, setStep] = useState<"style" | "upload" | "result" | "connect">("style");
-  const [showAllStyles, setShowAllStyles] = useState(false);
-  const [quickStyleSwitchMode, setQuickStyleSwitchMode] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<BathroomStyleId>("spa_retreat");
+  const [userDescription] = useState("");
+  const [step, setStep] = useState<"upload" | "result">(() => (restoredGeneration ? "result" : "upload"));
   const [generation, setGeneration] = useState<{
     generationId: string;
     projectId: string;
@@ -293,8 +276,7 @@ export function HomeownerTryClient({
   }, []);
   const [storedAttribution, setStoredAttribution] = useState<RenovisionAttribution | null>(null);
   const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
-  const bathroomCameraInputRef = useRef<HTMLInputElement>(null);
-  const bathroomLibraryInputRef = useRef<HTMLInputElement>(null);
+  const uploadFormRef = useRef<HTMLFormElement>(null);
 
   async function compressThenGenerate(
     prev: Awaited<ReturnType<typeof generateBathroomMockupAction>> | undefined,
@@ -344,15 +326,13 @@ export function HomeownerTryClient({
   useEffect(() => {
     if (!startNewProject) return;
     setGeneration(null);
-    setSelectedStyle(null);
-    setUserDescription("");
+    setSelectedStyle("spa_retreat");
     setLeadSubmitted(false);
     setLeadOpen(false);
-    setQuickStyleSwitchMode(false);
     setCompareBeforeSelection("original");
     setFirstUploadPreviewUrl(null);
     setLoaderBeforeBlob(null);
-    setStep("style");
+    setStep("upload");
   }, [startNewProject, startNewToken, setLoaderBeforeBlob]);
 
   useEffect(() => {
@@ -366,6 +346,12 @@ export function HomeownerTryClient({
       trackEvent("upload_completed", { style: generateState.selectedStyle });
     }
   }, [generateState, setLoaderBeforeBlob]);
+
+  useEffect(() => {
+    if (!generateState || !("error" in generateState)) return;
+    const el = bathroomPhotoInputRef.current;
+    if (el) el.value = "";
+  }, [generateState]);
 
   const slowGenerationToastMs = 120_000;
 
@@ -456,7 +442,6 @@ export function HomeownerTryClient({
           : prev,
       );
       setStep("result");
-      setQuickStyleSwitchMode(false);
     }
   }, [regenState]);
 
@@ -510,16 +495,9 @@ export function HomeownerTryClient({
     }
   }, [leadState, leadSubmitted]);
 
-  const selectedStyleConfig = useMemo(
-    () => bathroomStylesForTry.find((s) => s.id === selectedStyle) ?? null,
-    [bathroomStylesForTry, selectedStyle],
-  );
-
   const progressText = useMemo(() => {
-    if (step === "style") return "Style → Upload → Result → Connect";
-    if (step === "upload") return "Style ✓ → Upload → Result → Connect";
-    if (step === "result") return "Style ✓ → Upload ✓ → Result → Connect";
-    return "Style ✓ → Upload ✓ → Result ✓ → Connect";
+    if (step === "upload") return "Upload → Preview → Connect";
+    return "Upload ✓ → Preview → Connect";
   }, [step]);
 
   const loading = generatePending || regenPending || versionPending;
@@ -620,10 +598,6 @@ export function HomeownerTryClient({
     return formatVersionLabel(row.label, generation.selectedStyle, generation.styleName);
   }, [generation]);
 
-  const primaryStyleIds: BathroomStyleId[] = ["spa_retreat", "luxury_escape", "warm_minimalist"];
-  const primaryStyles = bathroomStylesForTry.filter((style) => primaryStyleIds.includes(style.id));
-  const additionalStyles = bathroomStylesForTry.filter((style) => !primaryStyleIds.includes(style.id));
-  const stylesToRender = showAllStyles ? [...primaryStyles, ...additionalStyles] : primaryStyles;
   const styleCardLabelById: Partial<Record<BathroomStyleId, string>> = {
     luxury_escape: "Modern Luxury",
   };
@@ -651,252 +625,71 @@ export function HomeownerTryClient({
         />
       ) : null}
 
-      <div className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
         <header className="space-y-2">
           {step === "result" ? (
             <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
           ) : (
             <>
-              <h1 className="text-balance text-3xl font-semibold tracking-tight">
-                See a Preview of Your Bathroom Remodel
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Pick a style, upload a photo, and see a realistic preview in minutes. No signup required.
+              <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">Preview your bathroom remodel</h1>
+              <p className="text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
+                Upload a photo to see your bathroom transformed in seconds.
               </p>
-              <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
+              <p className="text-xs font-medium text-muted-foreground sm:text-sm">No signup • Takes 2 min • Private</p>
             </>
           )}
         </header>
 
-        {step === "style" ? (
-          <section className="space-y-6">
-            <div className="space-y-2">
-              <h1 className="text-balance text-3xl font-semibold tracking-tight">Pick a style to start your remodel</h1>
-              <p className="text-sm text-muted-foreground">You can try different styles later.</p>
-              <p className="text-sm text-muted-foreground">
-                Not sure? Pick one to start — you can try another style later.
-              </p>
-              {quickStyleSwitchMode && generation ? (
-                <p className="text-sm font-medium text-renovision-navy">
-                  Your photo is already saved. Pick a style and we&apos;ll generate a new version right away.
-                </p>
-              ) : null}
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {stylesToRender.map((style) => (
-                <article
-                  key={style.id}
-                  className={[
-                    "group overflow-hidden rounded-2xl border bg-card shadow-sm transition-[border-color,box-shadow,transform,ring] duration-200 ease-out",
-                    "hover:-translate-y-0.5 hover:border-renovision-orange/55 hover:shadow-lg hover:shadow-renovision-navy/12",
-                    "focus-within:-translate-y-0.5 focus-within:border-renovision-orange/60 focus-within:shadow-lg focus-within:shadow-renovision-navy/12 focus-within:ring-2 focus-within:ring-renovision-orange/30 focus-within:ring-offset-2 focus-within:ring-offset-background",
-                    style.id === "spa_retreat"
-                      ? "border-renovision-orange/35 ring-1 ring-renovision-orange/20"
-                      : "border-border/80",
-                  ].join(" ")}
-                >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                    {style.adminOnly ? (
-                      <span className="absolute left-3 top-3 z-10 rounded-full bg-amber-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
-                        Admin preview
-                      </span>
-                    ) : null}
-                    {style.id === "spa_retreat" ? (
-                      <span className="absolute left-3 top-3 z-10 rounded-full bg-renovision-orange px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm ring-2 ring-white/30">
-                        Most Popular
-                      </span>
-                    ) : null}
-                    {style.id === "spa_retreat" ? (
-                      <Image
-                        src={afterSpaImage}
-                        alt="Spa Retreat bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : style.id === "bold_modern" ? (
-                      <Image
-                        src={afterBoldImage}
-                        alt="Bold Modern bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : style.id === "luxury_escape" ? (
-                      <Image
-                        src={afterLuxuryImage}
-                        alt="Luxury Escape bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : style.id === "clean_refresh" ? (
-                      <Image
-                        src={afterCleanImage}
-                        alt="Clean Refresh bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : style.id === "warm_minimalist" ? (
-                      <Image
-                        src={afterWarmImage}
-                        alt="Warm Minimalist bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : style.id === "coastal_beach_house" ? (
-                      <Image
-                        src={afterCleanImage}
-                        alt="Coastal Beach House bathroom inspiration"
-                        fill
-                        className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.045]"
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                        Bathroom inspiration
-                      </div>
-                    )}
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] bg-gradient-to-t from-black/80 via-black/45 to-transparent px-4 pb-3 pt-14 sm:pt-16">
-                      <p className="line-clamp-2 min-w-0 text-lg font-semibold leading-tight text-white drop-shadow-md">
-                        {displayStyleName(style.id, style.name)}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-white/90 drop-shadow-md">
-                        {style.subtitle}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-3 sm:p-4">
-                    {quickStyleSwitchMode && generation ? (
-                      <form action={regenAction}>
-                        <input type="hidden" name="generation_id" value={generation.generationId} />
-                        <input type="hidden" name="project_id" value={generation.projectId} />
-                        <input type="hidden" name="selected_style" value={style.id} />
-                        <input type="hidden" name="user_description" value={userDescription} />
-                        <input type="hidden" name="image_source" value="original" />
-                        <input type="hidden" name="attribution_json" value={attributionJson} />
-                        <Button type="submit" className="h-11 w-full rounded-xl" disabled={regenPending}>
-                          {regenPending ? "Designing your bathroom..." : "Use This Style"}
-                        </Button>
-                      </form>
-                    ) : (
-                      <Button
-                        type="button"
-                        className="h-11 w-full rounded-xl"
-                        onClick={() => {
-                          setQuickStyleSwitchMode(false);
-                          trackEvent("style_selected", { style: style.id });
-                          setSelectedStyle(style.id);
-                          setStep("upload");
-                        }}
-                      >
-                        Use this style
-                      </Button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {additionalStyles.length > 0 ? (
-              <div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="px-0 text-sm font-semibold text-renovision-navy hover:bg-transparent hover:text-renovision-navy/85"
-                  onClick={() => setShowAllStyles((prev) => !prev)}
-                >
-                  {showAllStyles ? "Show fewer styles" : "View all styles"}
-                </Button>
-              </div>
-            ) : null}
-
-            <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
-              <Label htmlFor="user_vision" className="text-sm font-semibold">
-                Have your own vision?
-              </Label>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Describe what you want, then continue — you&apos;ll upload your bathroom photo on the next step.
-              </p>
-              <textarea
-                id="user_vision"
-                value={userDescription}
-                onChange={(e) => setUserDescription(e.target.value)}
-                rows={4}
-                className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="Example: bright spa bathroom with white tile, wood vanity, black fixtures…"
-              />
-              {quickStyleSwitchMode && generation ? (
-                <form action={regenAction} className="mt-3">
-                  <input type="hidden" name="generation_id" value={generation.generationId} />
-                  <input type="hidden" name="project_id" value={generation.projectId} />
-                  <input type="hidden" name="selected_style" value="your_vision" />
-                  <input type="hidden" name="user_description" value={userDescription} />
-                  <input type="hidden" name="image_source" value="original" />
-                  <input type="hidden" name="attribution_json" value={attributionJson} />
-                  <Button type="submit" className="h-11 w-full rounded-xl" disabled={regenPending}>
-                    {regenPending ? "Designing your bathroom..." : "Generate from my description"}
-                  </Button>
-                </form>
-              ) : (
-                <Button
-                  type="button"
-                  className="mt-3 h-11 w-full rounded-xl"
-                  onClick={() => {
-                    const d = userDescription.trim();
-                    if (!d) {
-                      toast.error("Add a short description", {
-                        description: "Tell us what you want to see, or pick a style above instead.",
-                      });
-                      return;
-                    }
-                    setQuickStyleSwitchMode(false);
-                    trackEvent("style_selected", { style: "your_vision" });
-                    setSelectedStyle("your_vision");
-                    setStep("upload");
-                  }}
-                >
-                  Continue to upload photo
-                </Button>
-              )}
-            </div>
-          </section>
-        ) : null}
-
         {step === "upload" ? (
-          <form
-            action={generateAction}
-            className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-sm"
-            onSubmit={() => {
-              trackEvent("upload_started", { style: selectedStyle ?? "unknown" });
-            }}
-          >
-            <input type="hidden" name="selected_style" value={selectedStyle ?? ""} />
+          <>
+            <div className="mx-auto max-w-lg space-y-1.5">
+              <div className="relative mx-auto flex h-[9.5rem] w-full max-w-md gap-1 overflow-hidden rounded-2xl border border-border/70 bg-muted/40 shadow-sm ring-1 ring-black/[0.04] sm:h-40">
+                <div className="relative min-w-0 flex-1">
+                  <Image
+                    src={LANDING_DEMO_BEFORE}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 640px) 42vw, 200px"
+                    priority
+                  />
+                  <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                    Before
+                  </span>
+                </div>
+                <div className="relative min-w-0 flex-1">
+                  <Image
+                    src={UPLOAD_TEASER_AFTER}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 640px) 42vw, 200px"
+                    priority
+                  />
+                  <span className="absolute bottom-2 right-2 rounded-md bg-renovision-orange px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                    After
+                  </span>
+                </div>
+              </div>
+              <p className="text-center text-[11px] text-muted-foreground">Example — yours will use your real photo.</p>
+            </div>
+
+            <form
+              ref={uploadFormRef}
+              action={generateAction}
+              className="space-y-5 rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-6"
+              onSubmit={() => {
+                trackEvent("upload_started", { style: selectedStyle });
+              }}
+            >
+            <input type="hidden" name="selected_style" value={selectedStyle} />
             <input type="hidden" name="user_description" value={userDescription} />
             <input type="hidden" name="attribution_json" value={attributionJson} />
             <input type="hidden" name="start_new_project" value={startNewProject ? "1" : "0"} />
-            <div>
-              <p className="text-xl font-semibold">Upload your bathroom photo</p>
-              <p className="text-sm text-muted-foreground">We&apos;ll redesign it in the style you picked.</p>
-              <p className="mt-1 text-xs text-muted-foreground">Your photo is used to create your remodel preview.</p>
-              <p className="mt-1 text-xs text-muted-foreground">Works best with a clear photo of the full bathroom.</p>
-              {selectedStyleConfig ? (
-                <p className="mt-1 text-xs font-medium text-renovision-navy">
-                  Selected style: {displayStyleName(selectedStyleConfig.id, selectedStyleConfig.name)}
-                </p>
-              ) : null}
-            </div>
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="bathroom_photo" className="text-sm font-medium">
-                  Bathroom photo
-                </Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Take a new picture with your camera, or choose one from your photo library.
-                </p>
-              </div>
+            <div className="space-y-4">
+              <Label htmlFor="bathroom_photo" className="sr-only">
+                Bathroom photo
+              </Label>
               <input
                 ref={bathroomPhotoInputRef}
                 id="bathroom_photo"
@@ -904,6 +697,7 @@ export function HomeownerTryClient({
                 type="file"
                 accept="image/*"
                 required
+                aria-label="Bathroom photo to upload"
                 className="sr-only"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -927,83 +721,42 @@ export function HomeownerTryClient({
                   });
                   const objectUrl = URL.createObjectURL(file);
                   setLoaderBeforeBlob(objectUrl);
-                  /** HEIC/HEIF: browsers often can’t decode for inline preview; server converts with Sharp. */
                   if (isLikelyHeicUpload(file)) {
                     setFirstUploadPreviewUrl(null);
-                    toast.message("Photo selected", {
+                    toast.message("Photo added", {
                       description:
                         file.size > MAX_TRY_SERVER_ACTION_UPLOAD_BYTES
-                          ? "HEIC/HEIF works — preview may be skipped. If upload fails, export as JPEG in Photos (large files hit hosting limits)."
-                          : "Apple HEIC/HEIF uploads work — inline preview may be skipped until generation finishes.",
+                          ? "HEIC selected — if upload fails, try a smaller JPEG."
+                          : "HEIC ok — preview may appear after generate.",
                     });
-                    return;
-                  }
-                  if (previewAllowed(file)) {
+                  } else if (previewAllowed(file)) {
                     setFirstUploadPreviewUrl(objectUrl);
-                    toast.message("Photo selected");
-                    return;
+                    toast.success("Photo added");
+                  } else {
+                    setFirstUploadPreviewUrl(null);
+                    toast.message("Photo added", {
+                      description: "Large file — thumbnail hidden until your preview is ready.",
+                    });
                   }
-                  setFirstUploadPreviewUrl(null);
-                  toast.message("Photo selected", {
-                    description:
-                      "This photo is large — we’ll show it while your mockup generates (thumbnail hidden to avoid slowdowns).",
+                  queueMicrotask(() => {
+                    uploadFormRef.current?.requestSubmit();
                   });
                 }}
               />
-              <input
-                ref={bathroomCameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  const main = bathroomPhotoInputRef.current;
-                  if (main && file) assignImageToFileInput(main, file);
-                  e.target.value = "";
-                }}
-              />
-              <input
-                ref={bathroomLibraryInputRef}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  const main = bathroomPhotoInputRef.current;
-                  if (main && file) assignImageToFileInput(main, file);
-                  e.target.value = "";
-                }}
-              />
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 w-full justify-center gap-2 rounded-xl border-dashed text-base sm:h-11"
-                  onClick={() => bathroomCameraInputRef.current?.click()}
-                >
-                  <Camera className="size-5 shrink-0" aria-hidden />
-                  Take photo
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-12 w-full justify-center gap-2 rounded-xl border-dashed text-base sm:h-11"
-                  onClick={() => bathroomLibraryInputRef.current?.click()}
-                >
-                  <Images className="size-5 shrink-0" aria-hidden />
-                  Photo library
-                </Button>
-              </div>
+              <Button
+                type="button"
+                className="h-16 w-full justify-center gap-2.5 rounded-2xl bg-renovision-navy text-lg font-semibold text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 disabled:opacity-60 sm:h-[4.25rem] sm:text-xl"
+                disabled={generatePending}
+                onClick={() => bathroomPhotoInputRef.current?.click()}
+              >
+                <Upload className="size-6 shrink-0 sm:size-7" aria-hidden />
+                Upload Bathroom Photo
+              </Button>
               {firstUploadPreviewUrl ? (
-                <div className="relative mx-auto mt-3 aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-muted">
+                <div className="relative mx-auto aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-muted">
                   <Image
                     src={firstUploadPreviewUrl}
-                    alt="Selected bathroom preview"
+                    alt="Your selected bathroom photo"
                     fill
                     className="object-cover"
                     unoptimized
@@ -1014,24 +767,23 @@ export function HomeownerTryClient({
             {generateState && "error" in generateState ? (
               <p className="text-sm text-destructive">{generateState.error}</p>
             ) : null}
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                variant="outline"
+            <div className="flex justify-center pt-1">
+              <Link
+                href="/"
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "text-muted-foreground hover:text-foreground",
+                )}
                 onClick={() => {
                   setFirstUploadPreviewUrl(null);
                   setLoaderBeforeBlob(null);
-                  setQuickStyleSwitchMode(false);
-                  setStep("style");
                 }}
               >
-                Back
-              </Button>
-              <Button type="submit" className="rounded-xl">
-                {generatePending ? "Designing your bathroom..." : "Generate My Mockup"}
-              </Button>
+                ← Home
+              </Link>
             </div>
           </form>
+          </>
         ) : null}
 
         {step === "result" && generation ? (
@@ -1060,6 +812,47 @@ export function HomeownerTryClient({
                 <p className="text-sm text-destructive">{versionState.error}</p>
               ) : null}
               <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Style</p>
+                <p className="text-xs text-muted-foreground">
+                  Switch look using your original photo (usually 1–3 minutes per style).
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {POST_RESULT_STYLE_PRESETS.map(({ id, label }) => {
+                    const active = generation.selectedStyle === id;
+                    if (active) {
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex h-9 items-center rounded-full border-2 border-renovision-orange bg-renovision-orange/10 px-3.5 text-sm font-semibold text-renovision-navy"
+                        >
+                          {label}
+                        </span>
+                      );
+                    }
+                    return (
+                      <form key={id} action={regenAction} className="inline">
+                        <input type="hidden" name="generation_id" value={generation.generationId} />
+                        <input type="hidden" name="project_id" value={generation.projectId} />
+                        <input type="hidden" name="selected_style" value={id} />
+                        <input type="hidden" name="user_description" value={userDescription} />
+                        <input type="hidden" name="image_source" value="original" />
+                        <input type="hidden" name="attribution_json" value={attributionJson} />
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          disabled={regenPending}
+                          className="h-9 rounded-full border-border/80 px-3.5 text-sm font-semibold hover:border-renovision-orange/50"
+                          onClick={() => trackEvent("style_selected", { style: id })}
+                        >
+                          {label}
+                        </Button>
+                      </form>
+                    );
+                  })}
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">Regenerate (below):</span> builds a new preview from your{" "}
                 <span className="font-medium text-foreground">original bathroom photo</span>, not from{" "}
@@ -1320,7 +1113,7 @@ export function HomeownerTryClient({
             <div className="rounded-2xl border border-renovision-navy/20 bg-gradient-to-b from-background to-renovision-navy-muted/25 p-4 shadow-lg sm:p-5">
               <p className="text-lg font-semibold">Like this direction? Pick what to do next.</p>
               <p className="mt-1 text-xs text-muted-foreground">Quick actions</p>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <form action={connectAction} className="w-full">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
@@ -1338,27 +1131,14 @@ export function HomeownerTryClient({
                   variant="outline"
                   className="h-11 w-full rounded-xl text-sm font-semibold"
                   onClick={() => {
-                    setQuickStyleSwitchMode(true);
-                    setStep("style");
-                  }}
-                >
-                  Try Another Style
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 w-full rounded-xl text-sm font-semibold"
-                  onClick={() => {
                     setGeneration(null);
-                    setSelectedStyle(null);
-                    setUserDescription("");
+                    setSelectedStyle("spa_retreat");
                     setLeadSubmitted(false);
                     setLeadOpen(false);
-                    setQuickStyleSwitchMode(false);
                     setCompareBeforeSelection("original");
                     setFirstUploadPreviewUrl(null);
                     setLoaderBeforeBlob(null);
-                    setStep("style");
+                    setStep("upload");
                   }}
                 >
                   Start New Project
