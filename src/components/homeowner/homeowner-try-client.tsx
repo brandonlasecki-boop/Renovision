@@ -68,13 +68,69 @@ function formatTweakImpactBand(s: TryTweakSuggestion): string {
   if (lo === 0 && hi === 0) return "";
   if (hi <= 0) {
     return lo === hi
-      ? `Est. save ~${usd.format(Math.abs(lo))}`
-      : `Est. save ~${usd.format(Math.abs(hi))}–${usd.format(Math.abs(lo))}`;
+      ? `Save ~${usd.format(Math.abs(lo))}`
+      : `Save ~${usd.format(Math.abs(hi))}–${usd.format(Math.abs(lo))}`;
   }
   if (lo >= 0) {
-    return lo === hi ? `Est. +${usd.format(lo)}` : `Est. +${usd.format(lo)}–${usd.format(hi)}`;
+    return lo === hi ? `+${usd.format(lo)}` : `+${usd.format(lo)}–${usd.format(hi)}`;
   }
   return `${usd.format(lo)}–${usd.format(hi)}`;
+}
+
+function formatUsdBand(low: number, high: number): string {
+  const a = Math.min(low, high);
+  const b = Math.max(low, high);
+  if (a === b) return usd.format(a);
+  return `${usd.format(a)}–${usd.format(b)}`;
+}
+
+/** Whole-USD savings when both deltas imply lower cost (non-positive band). */
+function tweakSavingsBandUsd(row: TryTweakSuggestion): { low: number; high: number } | null {
+  const lo = Math.round(Math.min(row.deltaMin, row.deltaMax));
+  const hi = Math.round(Math.max(row.deltaMin, row.deltaMax));
+  if (lo === 0 && hi === 0) return null;
+  if (hi > 0) return null;
+  const x = Math.abs(hi);
+  const y = Math.abs(lo);
+  return { low: Math.min(x, y), high: Math.max(x, y) };
+}
+
+/** Whole-USD add when band does not go negative. */
+function tweakUpgradeBandUsd(row: TryTweakSuggestion): { low: number; high: number } | null {
+  const lo = Math.round(Math.min(row.deltaMin, row.deltaMax));
+  const hi = Math.round(Math.max(row.deltaMin, row.deltaMax));
+  if (lo === 0 && hi === 0) return null;
+  if (lo < 0) return null;
+  return { low: lo, high: hi };
+}
+
+function sumTweakBands(
+  rows: TryTweakSuggestion[],
+  picker: (r: TryTweakSuggestion) => { low: number; high: number } | null,
+  options?: { onlyChecked?: (idx: number) => boolean },
+): { low: number; high: number } | null {
+  let low = 0;
+  let high = 0;
+  let counted = 0;
+  for (let idx = 0; idx < rows.length; idx++) {
+    if (options?.onlyChecked && !options.onlyChecked(idx)) continue;
+    const b = picker(rows[idx]!);
+    if (!b) continue;
+    low += b.low;
+    high += b.high;
+    counted += 1;
+  }
+  if (counted === 0) return null;
+  return { low, high };
+}
+
+function shortTweakLine(text: string, maxChars = 78): string {
+  const t = text.trim().replace(/\s+/g, " ");
+  if (t.length <= maxChars) return t;
+  const cut = t.slice(0, maxChars - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  const base = (lastSpace > 36 ? cut.slice(0, lastSpace) : cut).trimEnd();
+  return `${base}…`;
 }
 
 type TryMockupVersionRow = {
@@ -166,6 +222,8 @@ export function HomeownerTryClient({
   const uploadFormRef = useRef<HTMLFormElement>(null);
   /** Result step: show minimal “wow” first; reveal style, AI tweaks, cost, etc. after user opts in. */
   const [tryResultCustomizeOpen, setTryResultCustomizeOpen] = useState(false);
+  const [saveTweakChecked, setSaveTweakChecked] = useState<Record<number, boolean>>({});
+  const [designTweakChecked, setDesignTweakChecked] = useState<Record<number, boolean>>({});
 
   async function compressThenGenerate(
     prev: Awaited<ReturnType<typeof generateBathroomMockupAction>> | undefined,
@@ -251,7 +309,7 @@ export function HomeownerTryClient({
     const timeoutId = window.setTimeout(() => {
       toast.message("Still generating...", {
         description:
-          "Complex renders often need 1–3 mins. You can keep this tab open. If it fails, try a smaller JPG/PNG photo.",
+          "Complex renders often need 1–2 mins. You can keep this tab open. If it fails, try a smaller JPG/PNG photo.",
       });
     }, slowGenerationToastMs);
     return () => window.clearTimeout(timeoutId);
@@ -386,6 +444,52 @@ export function HomeownerTryClient({
     }
   }, [leadState, leadSubmitted]);
 
+  const tweakPanelResetKey = useMemo(() => {
+    if (!generation) return "";
+    const enc = (rows: TryTweakSuggestion[]) =>
+      rows.map((r) => `${r.text}\t${r.deltaMin}\t${r.deltaMax}`).join("\n");
+    return `${generation.generationId}\n${enc(generation.saveMoneySuggestions ?? [])}\n${enc(generation.improveDesignSuggestions ?? [])}`;
+  }, [generation]);
+
+  useEffect(() => {
+    if (!tweakPanelResetKey) return;
+    setSaveTweakChecked({});
+    setDesignTweakChecked({});
+  }, [tweakPanelResetKey]);
+
+  const saveMoneyAggregate = useMemo(
+    () =>
+      generation
+        ? sumTweakBands(generation.saveMoneySuggestions ?? [], tweakSavingsBandUsd)
+        : null,
+    [generation],
+  );
+  const improveDesignAggregate = useMemo(
+    () =>
+      generation
+        ? sumTweakBands(generation.improveDesignSuggestions ?? [], tweakUpgradeBandUsd)
+        : null,
+    [generation],
+  );
+  const selectedSaveTotal = useMemo(
+    () =>
+      generation
+        ? sumTweakBands(generation.saveMoneySuggestions ?? [], tweakSavingsBandUsd, {
+            onlyChecked: (i) => Boolean(saveTweakChecked[i]),
+          })
+        : null,
+    [generation, saveTweakChecked],
+  );
+  const selectedUpgradeTotal = useMemo(
+    () =>
+      generation
+        ? sumTweakBands(generation.improveDesignSuggestions ?? [], tweakUpgradeBandUsd, {
+            onlyChecked: (i) => Boolean(designTweakChecked[i]),
+          })
+        : null,
+    [generation, designTweakChecked],
+  );
+
   const progressText = useMemo(() => {
     if (step === "upload") return "Upload → Preview → Connect";
     return "Upload ✓ → Preview → Connect";
@@ -424,13 +528,13 @@ export function HomeownerTryClient({
     if (generatePending) {
       return {
         title: "Designing your bathroom...",
-        hint: "Usually 1–3 mins for your preview. Cost details may update right after it appears.",
+        hint: "Usually 1–2 mins for your preview. Cost details may update right after it appears.",
       };
     }
     if (regenPending) {
       return {
         title: "Applying your tweak…",
-        hint: "Usually 1–3 mins",
+        hint: "Usually 1–2 mins",
       };
     }
     if (versionPending) {
@@ -441,7 +545,7 @@ export function HomeownerTryClient({
     }
     return {
       title: "Creating your bathroom remodel…",
-      hint: "Usually 1–3 mins",
+      hint: "Usually 1–2 mins",
     };
   }, [generatePending, regenPending, versionPending]);
 
@@ -736,22 +840,22 @@ export function HomeownerTryClient({
             <>
             <div className="space-y-3">
               <p className="text-sm font-semibold text-foreground">Try a different style</p>
-              <p className="text-xs text-muted-foreground">Uses your original photo. Usually 1–3 minutes per style.</p>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-xs text-muted-foreground">Uses your original photo. Usually 1–2 minutes per style.</p>
+              <div className="-mx-1 flex flex-nowrap items-stretch gap-2 overflow-x-auto pb-1 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {POST_RESULT_STYLE_PRESETS.map(({ id, label }) => {
                   const active = generation.selectedStyle === id;
                   if (active) {
                     return (
                       <span
                         key={id}
-                        className="inline-flex h-9 items-center rounded-full border-2 border-renovision-orange bg-renovision-orange/10 px-3.5 text-sm font-semibold text-renovision-navy"
+                        className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border-2 border-renovision-orange bg-renovision-orange/10 px-2.5 text-xs font-semibold text-renovision-navy sm:px-3.5 sm:text-sm"
                       >
                         {label}
                       </span>
                     );
                   }
                   return (
-                    <form key={id} action={regenAction} className="inline">
+                    <form key={id} action={regenAction} className="inline shrink-0">
                       <input type="hidden" name="generation_id" value={generation.generationId} />
                       <input type="hidden" name="project_id" value={generation.projectId} />
                       <input type="hidden" name="selected_style" value={id} />
@@ -763,7 +867,7 @@ export function HomeownerTryClient({
                         variant="outline"
                         size="sm"
                         disabled={regenPending}
-                        className="h-9 rounded-full border-border/80 px-3.5 text-sm font-semibold hover:border-renovision-orange/50"
+                        className="h-9 shrink-0 whitespace-nowrap rounded-full border-border/80 px-2.5 text-xs font-semibold hover:border-renovision-orange/50 sm:px-3.5 sm:text-sm"
                         onClick={() => trackEvent("style_selected", { style: id })}
                       >
                         {label}
@@ -786,69 +890,117 @@ export function HomeownerTryClient({
 
                   {(generation.saveMoneySuggestions?.length ?? 0) > 0 ||
                   (generation.improveDesignSuggestions?.length ?? 0) > 0 ? (
-                    <details className="group rounded-xl border border-border/70 bg-muted/20">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/40 sm:px-4 [&::-webkit-details-marker]:hidden">
-                        <span className="text-sm font-semibold text-foreground">Lower cost or improve design</span>
-                        <ChevronDown
-                          className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
-                          aria-hidden
-                        />
-                      </summary>
-                      <div className="border-t border-border/60 px-3 pb-3 pt-3 sm:px-4">
-                        <div className="space-y-2">
-                          {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
-                            const impact = formatTweakImpactBand(row);
-                            return (
-                              <label
-                                key={`save-${idx}-${row.text.slice(0, 24)}`}
-                                className="flex cursor-pointer gap-2.5 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-emerald-500/35 has-[:checked]:border-emerald-500/45 has-[:checked]:bg-emerald-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                              >
-                                <input
-                                  type="checkbox"
-                                  name="save_money_option"
-                                  value={row.text}
-                                  disabled={regenPending}
-                                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-emerald-600"
-                                />
-                                <div className="min-w-0 flex-1 space-y-1">
-                                  <span className="text-sm leading-snug text-foreground">{row.text}</span>
-                                  {impact ? (
-                                    <span className="inline-flex max-w-full rounded-full bg-emerald-600/12 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-900 dark:text-emerald-300">
-                                      {impact}
+                    <div className="space-y-4">
+                      {(generation.saveMoneySuggestions?.length ?? 0) > 0 ? (
+                        <div className="overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-b from-emerald-500/[0.07] to-muted/15">
+                          <div className="border-b border-emerald-500/15 px-3 py-3 sm:px-4">
+                            <p className="text-sm font-semibold text-foreground">Lower your cost</p>
+                            {saveMoneyAggregate ? (
+                              <p className="mt-1 text-xs font-medium leading-relaxed text-emerald-950 dark:text-emerald-200/95">
+                                You could save up to {formatUsdBand(saveMoneyAggregate.low, saveMoneyAggregate.high)}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                                Tap swaps below to trim typical job cost.
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-y-3 p-3 sm:p-4">
+                            {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
+                              const impact = formatTweakImpactBand(row);
+                              return (
+                                <label
+                                  key={`save-${idx}-${row.text.slice(0, 24)}`}
+                                  title={row.text}
+                                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-colors hover:border-emerald-500/35 has-[:checked]:border-emerald-500/45 has-[:checked]:bg-emerald-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 sm:px-3.5 sm:py-3"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    name="save_money_option"
+                                    value={row.text}
+                                    checked={Boolean(saveTweakChecked[idx])}
+                                    disabled={regenPending}
+                                    onChange={(e) =>
+                                      setSaveTweakChecked((prev) => ({ ...prev, [idx]: e.target.checked }))
+                                    }
+                                    className="mt-1 h-[1.125rem] w-[1.125rem] shrink-0 rounded border-input accent-emerald-600 sm:mt-0.5"
+                                  />
+                                  <div className="min-w-0 flex-1 space-y-1.5">
+                                    <span className="block text-sm leading-relaxed text-foreground">
+                                      {shortTweakLine(row.text)}
                                     </span>
-                                  ) : null}
-                                </div>
-                              </label>
-                            );
-                          })}
-                          {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
-                            const impact = formatTweakImpactBand(row);
-                            return (
-                              <label
-                                key={`design-${idx}-${row.text.slice(0, 24)}`}
-                                className="flex cursor-pointer gap-2.5 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-amber-500/35 has-[:checked]:border-amber-500/45 has-[:checked]:bg-amber-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                              >
-                                <input
-                                  type="checkbox"
-                                  name="improve_design_option"
-                                  value={row.text}
-                                  disabled={regenPending}
-                                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-amber-600"
-                                />
-                                <div className="min-w-0 flex-1 space-y-1">
-                                  <span className="text-sm leading-snug text-foreground">{row.text}</span>
-                                  {impact ? (
-                                    <span className="inline-flex max-w-full rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-300">
-                                      {impact}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </label>
-                            );
-                          })}
+                                    {impact ? (
+                                      <span className="inline-flex max-w-full rounded-full bg-emerald-600/12 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-900 dark:text-emerald-300">
+                                        {impact}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                            {selectedSaveTotal ? (
+                              <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.09] px-3 py-2.5 text-sm font-semibold tabular-nums text-emerald-950 dark:text-emerald-100">
+                                Total savings: {formatUsdBand(selectedSaveTotal.low, selectedSaveTotal.high)}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
-                    </details>
+                      ) : null}
+
+                      {(generation.improveDesignSuggestions?.length ?? 0) > 0 ? (
+                        <div className="overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-b from-amber-500/[0.07] to-muted/15">
+                          <div className="border-b border-amber-500/15 px-3 py-3 sm:px-4">
+                            <p className="text-sm font-semibold text-foreground">Upgrade your design</p>
+                            <p className="mt-1 text-xs font-medium leading-relaxed text-amber-950 dark:text-amber-200/95">
+                              Upgrade options available
+                              {improveDesignAggregate
+                                ? ` — about +${formatUsdBand(improveDesignAggregate.low, improveDesignAggregate.high)} if you picked every idea below`
+                                : ""}
+                              .
+                            </p>
+                          </div>
+                          <div className="space-y-3 p-3 sm:p-4">
+                            {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
+                              const impact = formatTweakImpactBand(row);
+                              return (
+                                <label
+                                  key={`design-${idx}-${row.text.slice(0, 24)}`}
+                                  title={row.text}
+                                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 bg-background px-3 py-3.5 text-left transition-colors hover:border-amber-500/35 has-[:checked]:border-amber-500/45 has-[:checked]:bg-amber-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 sm:px-3.5 sm:py-3"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    name="improve_design_option"
+                                    value={row.text}
+                                    checked={Boolean(designTweakChecked[idx])}
+                                    disabled={regenPending}
+                                    onChange={(e) =>
+                                      setDesignTweakChecked((prev) => ({ ...prev, [idx]: e.target.checked }))
+                                    }
+                                    className="mt-1 h-[1.125rem] w-[1.125rem] shrink-0 rounded border-input accent-amber-600 sm:mt-0.5"
+                                  />
+                                  <div className="min-w-0 flex-1 space-y-1.5">
+                                    <span className="block text-sm leading-relaxed text-foreground">
+                                      {shortTweakLine(row.text)}
+                                    </span>
+                                    {impact ? (
+                                      <span className="inline-flex max-w-full rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-300">
+                                        {impact}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                            {selectedUpgradeTotal ? (
+                              <p className="rounded-xl border border-amber-500/25 bg-amber-500/[0.09] px-3 py-2.5 text-sm font-semibold tabular-nums text-amber-950 dark:text-amber-100">
+                                Total upgrades: +{formatUsdBand(selectedUpgradeTotal.low, selectedUpgradeTotal.high)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
 
                   <div className="rounded-xl border border-border/70 bg-muted/20 p-3 sm:p-4">
