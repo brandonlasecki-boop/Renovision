@@ -157,24 +157,16 @@
   }
 }
 
-/* Renovision /try loader — only the fact line animates; “Did you know?” stays put */
+/* Renovision /try loader — only the fun-fact line animates on change */
 @keyframes renovision-fact-text-in {
   0% {
     opacity: 0;
-    transform: translateY(0.4rem);
-    filter: blur(3px);
+    transform: translateY(0.2rem);
+    filter: blur(1.5px);
   }
-  28% {
-    opacity: 0.22;
-    filter: blur(2px);
-  }
-  52% {
-    opacity: 0.62;
-    filter: blur(1px);
-  }
-  78% {
-    opacity: 0.92;
-    filter: blur(0.35px);
+  45% {
+    opacity: 0.55;
+    filter: blur(0.5px);
   }
   100% {
     opacity: 1;
@@ -185,7 +177,7 @@
 
 .renovision-loader-fact-text {
   will-change: transform, opacity, filter;
-  animation: renovision-fact-text-in 1.05s cubic-bezier(0.33, 0, 0.2, 1) both;
+  animation: renovision-fact-text-in 0.65s cubic-bezier(0.33, 0, 0.2, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

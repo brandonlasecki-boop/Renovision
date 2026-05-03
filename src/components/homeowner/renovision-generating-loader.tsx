@@ -127,6 +127,8 @@ const BATHROOM_FACTS = [
 
 /** Seconds each “Did you know?” fact stays visible before rotating. */
 const FACT_DISPLAY_INTERVAL_SEC = 8;
+/** Seconds each primary progress message stays visible before rotating. */
+const PROGRESS_MESSAGE_INTERVAL_SEC = 5;
 
 export type RenovisionGeneratingLoaderProps = {
   title: string;
@@ -332,12 +334,13 @@ export function RenovisionGeneratingLoader({
   const activeProgressSteps = progressSteps?.length
     ? progressSteps
     : [
-        "Analyzing your layout...",
-        "Designing your new space...",
-        "Applying finishes...",
-        "Finalizing your remodel...",
+        "Analyzing your bathroom layout...",
+        "Detecting walls, fixtures, and space...",
+        "Applying your remodel design...",
+        "Generating your new bathroom preview...",
       ];
-  const progressStepIndex = Math.floor(elapsedSec / 4) % activeProgressSteps.length;
+  const progressStepIndex =
+    Math.floor(elapsedSec / PROGRESS_MESSAGE_INTERVAL_SEC) % activeProgressSteps.length;
   const progressStep = activeProgressSteps[progressStepIndex];
 
   useEffect(() => {
@@ -385,24 +388,24 @@ export function RenovisionGeneratingLoader({
           <RenovisionLoaderLoopingVideo />
         </div>
 
-        <p className="mt-4 text-sm font-semibold text-foreground">{title}</p>
-        <p className="mt-2 text-xs text-muted-foreground">{hint}</p>
         <p
           key={progressStepIndex}
-          className="mt-3 rounded-lg border border-renovision-teal/30 bg-renovision-teal/10 px-3 py-2 text-sm font-semibold text-renovision-navy"
+          aria-live="polite"
+          className="mt-4 text-balance text-base font-semibold leading-snug text-foreground sm:text-lg"
         >
-          🔥 {progressStep}
+          {progressStep}
         </p>
+        <p className="mt-2 text-sm font-semibold text-foreground/90">{title}</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>
 
-        <div className="renovision-loader-fact mt-4 rounded-xl border border-renovision-orange/25 bg-renovision-orange-muted/60 px-4 py-3 text-left text-sm leading-snug shadow-sm">
-          <span className="block text-xs font-semibold text-renovision-navy/80">While we design your space...</span>
-          <span className="block text-xs font-bold uppercase tracking-wide text-renovision-orange">
+        <div className="renovision-loader-fact mt-4 rounded-lg border border-border/60 bg-muted/35 px-3 py-2.5 text-left shadow-none">
+          <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Did you know?
           </span>
-          <div className="relative mt-2 min-h-[3.75rem] overflow-hidden sm:min-h-[3.25rem]">
+          <div className="relative mt-1.5 min-h-[2.75rem] overflow-hidden sm:min-h-[2.5rem]">
             <p
               key={factIndex}
-              className="renovision-loader-fact-text text-[15px] font-medium leading-relaxed text-renovision-navy sm:text-sm"
+              className="renovision-loader-fact-text text-xs font-normal leading-snug text-muted-foreground sm:text-[13px]"
             >
               {fact}
             </p>

@@ -179,6 +179,17 @@ const BATHROOM_FIXTURE_PRESERVATION_LOCK_WET_ZONE = [
   "If uncertain outside the wet zone, preserve the original fixture and wall geometry.",
 ].join("\n");
 
+/**
+ * Appended to all homeowner `/try` image-edit prompts (Vertex + OpenAI) for preset styles (Spa, Clean,
+ * Luxury, Bold, Warm, Coastal, etc.) so wet zones read as modern glass showers where a shower or tub/shower exists.
+ */
+const HOMEOWNER_TRY_GLASS_SHOWER_ENCLOSURE_DIRECTIVE = [
+  "GLASS SHOWER ENCLOSURE (PRESET /TRY STYLES — WHEN A SHOWER OR TUB/SHOWER ZONE IS VISIBLE):",
+  "Depict wet-zone glazing as clear tempered glass: frameless panels/doors and/or slim metal frames (matte black, brushed nickel, or chrome) that match the selected style.",
+  "Prefer a transparent glass enclosure or fixed glass panel at the main shower opening instead of opaque walls, solid-only surrounds, or fabric curtains as the primary closure—unless the source framing makes a plausible glass door impossible without changing room geometry (then use the most glass-forward option that still respects the same opening width and footprint).",
+  "Keep the same shower/tub footprint, curb line, and opening width as the source photo; do not widen the wet zone.",
+].join("\n\n");
+
 const MOCKUP_ONLY_REMODEL_EDIT_PROMPT = [
   "Apply the saved scope and quote as finish and material updates only (tile, paint, grout color, trim, lighting character, fixture styles) where those elements already appear in the photo.",
   "Do not change where visible fixtures sit (shower/tub, vanity/sink, etc.). Do not add fixtures that are not shown in the photo. The room layout must match the source photo.",
@@ -594,6 +605,7 @@ export async function runHomeownerTryMockupGeneration(params: {
       regenerateFromRoom: params.regenerateFromRoom,
       rawAdditionalPrompt,
     });
+    editPromptVertex = `${editPromptVertex}\n\n${HOMEOWNER_TRY_GLASS_SHOWER_ENCLOSURE_DIRECTIVE}`;
     editPromptOpenAi = prependTweakPriorityLayerToImagePrompt(editPromptOpenAi, {
       regenerateFromRoom: params.regenerateFromRoom,
       rawAdditionalPrompt,
@@ -603,6 +615,7 @@ export async function runHomeownerTryMockupGeneration(params: {
     if (luxuryOpenAiStrictPrompt) {
       editPromptOpenAi = `${editPromptOpenAi}\n\n${LUXURY_OPENAI_TRAILING_GEOMETRY_ENFORCEMENT}`;
     }
+    editPromptOpenAi = `${editPromptOpenAi}\n\n${HOMEOWNER_TRY_GLASS_SHOWER_ENCLOSURE_DIRECTIVE}`;
 
     const imageEditModel = process.env.OPENAI_IMAGE_EDIT_MODEL?.trim();
 
@@ -726,6 +739,7 @@ export async function runHomeownerTryMockupGeneration(params: {
               BATHROOM_SCENE_ANALYSIS_AND_STRUCTURE_GUARDRAILS,
               BATHROOM_VISIBILITY_LIGHTING_GUARDRAILS,
               BATHROOM_FIXTURE_PRESERVATION_LOCK,
+              HOMEOWNER_TRY_GLASS_SHOWER_ENCLOSURE_DIRECTIVE,
               strictRemodel,
             ]
               .filter(Boolean)
@@ -746,6 +760,7 @@ export async function runHomeownerTryMockupGeneration(params: {
               BATHROOM_SCENE_ANALYSIS_AND_STRUCTURE_GUARDRAILS,
               BATHROOM_VISIBILITY_LIGHTING_GUARDRAILS,
               BATHROOM_FIXTURE_PRESERVATION_LOCK,
+              HOMEOWNER_TRY_GLASS_SHOWER_ENCLOSURE_DIRECTIVE,
               strictRemodel,
             ]
               .filter(Boolean)

@@ -2349,7 +2349,7 @@ export async function regenerateBathroomMockupAction(
   if (imageSource === "current_mockup" && !multiHintActive && !legacyHint && !customTweakRaw) {
     return {
       error:
-        "Select at least one suggestion, add custom directions, or both — then click Update preview.",
+        "Select at least one suggestion, add custom directions, or both — then click Apply changes.",
     };
   }
 

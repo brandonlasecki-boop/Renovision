@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type ComponentPropsWithoutRef,
   useActionState,
   useCallback,
   useEffect,
@@ -97,118 +96,6 @@ function isLikelyMobileBrowser(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
 }
 
-/** Left side of compare — display only; does not change which mockup edits/regen use. */
-function CompareBeforePicker({
-  idSuffix,
-  mockupVersions,
-  styleId,
-  styleName,
-  value,
-  onChange,
-  disabled,
-}: {
-  idSuffix: string;
-  mockupVersions: TryMockupVersionRow[];
-  styleId: string;
-  styleName: string;
-  value: string;
-  onChange: (mockupIdOrOriginal: string) => void;
-  disabled: boolean;
-}) {
-  if (mockupVersions.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Label htmlFor={`compare-before-${idSuffix}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Left (before)
-      </Label>
-      <select
-        id={`compare-before-${idSuffix}`}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 min-w-[8rem] rounded-md border border-input bg-background px-2 text-sm"
-      >
-        <option value="original">Original photo</option>
-        {mockupVersions.map((v) => (
-          <option key={v.id} value={v.id}>
-            {formatVersionLabel(v.label, styleId, styleName)} mockup
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function MockupVersionPicker({
-  idSuffix,
-  generation,
-  versionAction,
-  disabled,
-  label = "After version",
-}: {
-  idSuffix: string;
-  generation: {
-    generationId: string;
-    projectId: string;
-    selectedStyle: string;
-    styleName: string;
-    mockupVersions: TryMockupVersionRow[];
-    activeMockupId: string;
-  };
-  versionAction: NonNullable<ComponentPropsWithoutRef<"form">["action"]>;
-  disabled: boolean;
-  /** Shown next to the dropdown (e.g. "Right (after)" when comparing two mockups). */
-  label?: string;
-}) {
-  if (generation.mockupVersions.length === 0) return null;
-  return (
-    <form action={versionAction} className="flex flex-wrap items-center gap-2">
-      <input type="hidden" name="generation_id" value={generation.generationId} />
-      <input type="hidden" name="project_id" value={generation.projectId} />
-      <Label htmlFor={`mockup-ver-${idSuffix}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </Label>
-      <select
-        id={`mockup-ver-${idSuffix}`}
-        name="mockup_id"
-        defaultValue={generation.activeMockupId}
-        key={`${generation.activeMockupId}-${generation.mockupVersions.length}`}
-        disabled={disabled}
-        className="h-9 min-w-[5.5rem] rounded-md border border-input bg-background px-2 text-sm"
-        onChange={(e) => {
-          e.currentTarget.form?.requestSubmit();
-        }}
-      >
-        {generation.mockupVersions.map((v) => (
-          <option key={v.id} value={v.id}>
-            {formatVersionLabel(v.label, generation.selectedStyle, generation.styleName)}
-          </option>
-        ))}
-      </select>
-    </form>
-  );
-}
-
-function styleTokenForVersionLabel(styleId: string, styleName: string): string {
-  if (styleId === "luxury_escape") return "Modern";
-  if (styleId === "spa_retreat") return "Spa";
-  if (styleId === "warm_minimalist") return "Warm";
-  if (styleId === "bold_modern") return "Bold";
-  if (styleId === "clean_refresh") return "Clean";
-  if (styleId === "coastal_beach_house") return "Coastal";
-  const first = styleName.trim().split(/\s+/)[0] ?? "";
-  return first || "Style";
-}
-
-function formatVersionLabel(versionLabel: string, styleId: string, styleName: string): string {
-  const clean = versionLabel.trim();
-  const vMatch = clean.match(/^v\s*(\d+)$/i);
-  if (vMatch?.[1]) {
-    return `V${vMatch[1]} ${styleTokenForVersionLabel(styleId, styleName)}`;
-  }
-  return `${clean} ${styleTokenForVersionLabel(styleId, styleName)}`.trim();
-}
-
 export function HomeownerTryClient({
   initial,
   restoredGeneration = null,
@@ -255,8 +142,6 @@ export function HomeownerTryClient({
   } | null>(null);
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
-  /** Compare slider / split left side: original upload or a saved mockup id (display-only). */
-  const [compareBeforeSelection, setCompareBeforeSelection] = useState<string>("original");
   /** Local `blob:` preview of the file picked on the upload step — used behind the loader on first generate. */
   const [firstUploadPreviewUrl, setFirstUploadPreviewUrl] = useState<string | null>(null);
   /**
@@ -306,7 +191,7 @@ export function HomeownerTryClient({
 
   const [generateState, generateAction, generatePending] = useActionState(compressThenGenerate, undefined);
   const [regenState, regenAction, regenPending] = useActionState(regenerateBathroomMockupAction, undefined);
-  const [versionState, versionAction, versionPending] = useActionState(selectTryMockupVersionAction, undefined);
+  const [versionState, , versionPending] = useActionState(selectTryMockupVersionAction, undefined);
   const [connectState, connectAction] = useActionState(trackConnectClickedAction, undefined);
   const [leadState, leadAction, leadPending] = useActionState(submitBathroomLeadAction, undefined);
 
@@ -321,7 +206,6 @@ export function HomeownerTryClient({
   useEffect(() => {
     if (!restoredGeneration) return;
     setGeneration(restoredGeneration);
-    setCompareBeforeSelection("original");
     setTryResultCustomizeOpen(false);
     setStep("result");
   }, [restoredGeneration]);
@@ -338,7 +222,6 @@ export function HomeownerTryClient({
     setSelectedStyle("spa_retreat");
     setLeadSubmitted(false);
     setLeadOpen(false);
-    setCompareBeforeSelection("original");
     setFirstUploadPreviewUrl(null);
     setLoaderBeforeBlob(null);
     setTryResultCustomizeOpen(false);
@@ -348,7 +231,6 @@ export function HomeownerTryClient({
   useEffect(() => {
     if (generateState && "success" in generateState && generateState.success) {
       setGeneration(generateState);
-      setCompareBeforeSelection("original");
       setStep("result");
       setFirstUploadPreviewUrl(null);
       setLoaderBeforeBlob(null);
@@ -515,11 +397,10 @@ export function HomeownerTryClient({
   const loadingProgressSteps = useMemo(() => {
     if (generatePending) {
       return [
-        "Analyzing your layout...",
-        "Mapping your fixtures...",
-        "Applying your selected style...",
-        "Finalizing your remodel...",
-        "Homeowners use Renovision to explore ideas before committing.",
+        "Analyzing your bathroom layout...",
+        "Detecting walls, fixtures, and space...",
+        "Applying your remodel design...",
+        "Generating your new bathroom preview...",
       ];
     }
     if (regenPending) {
@@ -578,14 +459,6 @@ export function HomeownerTryClient({
     }, 1000);
     return () => window.clearInterval(id);
   }, [loading]);
-  const activePromptProfile = useMemo(() => {
-    if (!generation) return "Master";
-    if (generation.selectedStyle === "spa_retreat") return "Master + Spa Retreat";
-    if (generation.selectedStyle === "bold_modern") return "Master + Bold Modern";
-    if (generation.selectedStyle === "luxury_escape") return "Master + Luxury Escape";
-    return `Master + ${generation.styleName}`;
-  }, [generation]);
-
   const afterImageForDisplay = useMemo(() => {
     if (!generation) return "";
     const match = generation.mockupVersions.find((v) => v.id === generation.activeMockupId);
@@ -594,19 +467,7 @@ export function HomeownerTryClient({
 
   const beforeImageForCompare = useMemo(() => {
     if (!generation) return "";
-    if (compareBeforeSelection === "original") return generation.uploadedImageUrl;
-    const row = generation.mockupVersions.find((v) => v.id === compareBeforeSelection);
-    return row?.imageUrl ?? generation.uploadedImageUrl;
-  }, [generation, compareBeforeSelection]);
-
-  /** Label for the mockup version used as the base image when using &quot;Update preview&quot; (matches Right (after)). */
-  const activeRightAfterVersionLabel = useMemo(() => {
-    if (!generation?.mockupVersions?.length) return "";
-    const row =
-      generation.mockupVersions.find((v) => v.id === generation.activeMockupId) ??
-      generation.mockupVersions[0];
-    if (!row) return "";
-    return formatVersionLabel(row.label, generation.selectedStyle, generation.styleName);
+    return generation.uploadedImageUrl;
   }, [generation]);
 
   const styleCardLabelById: Partial<Record<BathroomStyleId, string>> = {
@@ -615,12 +476,6 @@ export function HomeownerTryClient({
   const displayStyleName = (styleId: BathroomStyleId, fallback: string) =>
     styleCardLabelById[styleId] ?? fallback;
   const attributionJson = storedAttribution ? JSON.stringify(storedAttribution) : "";
-
-  useEffect(() => {
-    if (!generation || compareBeforeSelection === "original") return;
-    const ok = generation.mockupVersions.some((v) => v.id === compareBeforeSelection);
-    if (!ok) setCompareBeforeSelection("original");
-  }, [generation, compareBeforeSelection]);
 
   return (
     <div className="relative min-h-[70vh]">
@@ -823,87 +678,49 @@ export function HomeownerTryClient({
             </div>
             {tryResultCustomizeOpen ? (
             <>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Like this direction? We can help you explore next steps.</p>
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
-                <CompareBeforePicker
-                    idSuffix="slider"
-                    mockupVersions={generation.mockupVersions}
-                    styleId={generation.selectedStyle}
-                    styleName={generation.styleName}
-                    value={compareBeforeSelection}
-                    onChange={setCompareBeforeSelection}
-                    disabled={versionPending}
-                  />
-                  <MockupVersionPicker
-                    idSuffix="compare"
-                    generation={generation}
-                    versionAction={versionAction}
-                    disabled={versionPending}
-                    label="Right (after)"
-                  />
-                </div>
-              <div className="space-y-2 pt-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Style</p>
-                <p className="text-xs text-muted-foreground">
-                  Switch look using your original photo (usually 1–3 minutes per style).
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {POST_RESULT_STYLE_PRESETS.map(({ id, label }) => {
-                    const active = generation.selectedStyle === id;
-                    if (active) {
-                      return (
-                        <span
-                          key={id}
-                          className="inline-flex h-9 items-center rounded-full border-2 border-renovision-orange bg-renovision-orange/10 px-3.5 text-sm font-semibold text-renovision-navy"
-                        >
-                          {label}
-                        </span>
-                      );
-                    }
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-foreground">Try a different style</p>
+              <p className="text-xs text-muted-foreground">Uses your original photo. Usually 1–3 minutes per style.</p>
+              <div className="flex flex-wrap gap-2">
+                {POST_RESULT_STYLE_PRESETS.map(({ id, label }) => {
+                  const active = generation.selectedStyle === id;
+                  if (active) {
                     return (
-                      <form key={id} action={regenAction} className="inline">
-                        <input type="hidden" name="generation_id" value={generation.generationId} />
-                        <input type="hidden" name="project_id" value={generation.projectId} />
-                        <input type="hidden" name="selected_style" value={id} />
-                        <input type="hidden" name="user_description" value={userDescription} />
-                        <input type="hidden" name="image_source" value="original" />
-                        <input type="hidden" name="attribution_json" value={attributionJson} />
-                        <Button
-                          type="submit"
-                          variant="outline"
-                          size="sm"
-                          disabled={regenPending}
-                          className="h-9 rounded-full border-border/80 px-3.5 text-sm font-semibold hover:border-renovision-orange/50"
-                          onClick={() => trackEvent("style_selected", { style: id })}
-                        >
-                          {label}
-                        </Button>
-                      </form>
+                      <span
+                        key={id}
+                        className="inline-flex h-9 items-center rounded-full border-2 border-renovision-orange bg-renovision-orange/10 px-3.5 text-sm font-semibold text-renovision-navy"
+                      >
+                        {label}
+                      </span>
                     );
-                  })}
-                </div>
+                  }
+                  return (
+                    <form key={id} action={regenAction} className="inline">
+                      <input type="hidden" name="generation_id" value={generation.generationId} />
+                      <input type="hidden" name="project_id" value={generation.projectId} />
+                      <input type="hidden" name="selected_style" value={id} />
+                      <input type="hidden" name="user_description" value={userDescription} />
+                      <input type="hidden" name="image_source" value="original" />
+                      <input type="hidden" name="attribution_json" value={attributionJson} />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        disabled={regenPending}
+                        className="h-9 rounded-full border-border/80 px-3.5 text-sm font-semibold hover:border-renovision-orange/50"
+                        onClick={() => trackEvent("style_selected", { style: id })}
+                      >
+                        {label}
+                      </Button>
+                    </form>
+                  );
+                })}
               </div>
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Regenerate (below):</span> builds a new preview from your{" "}
-                <span className="font-medium text-foreground">original bathroom photo</span>, not from{" "}
-                <span className="font-medium text-foreground">Right (after)</span>.
-              </p>
-              <form action={regenAction} className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
-                <input type="hidden" name="generation_id" value={generation.generationId} />
-                <input type="hidden" name="project_id" value={generation.projectId} />
-                <input type="hidden" name="selected_style" value={generation.selectedStyle} />
-                <input type="hidden" name="image_source" value="original" />
-                <input type="hidden" name="attribution_json" value={attributionJson} />
-                <Button type="submit" variant="outline" className="rounded-xl sm:w-auto" disabled={regenPending}>
-                  {regenPending ? "Regenerating..." : "Regenerate (New Version)"}
-                </Button>
-              </form>
             </div>
 
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
               <div className="p-4 sm:p-6">
-                <form action={regenAction} className="space-y-5 sm:space-y-6">
+                <form action={regenAction} className="space-y-5">
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
                   <input type="hidden" name="selected_style" value={generation.selectedStyle} />
@@ -911,123 +728,96 @@ export function HomeownerTryClient({
                   <input type="hidden" name="source_mockup_id" value={generation.activeMockupId} />
                   <input type="hidden" name="attribution_json" value={attributionJson} />
 
-                  <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Update preview will edit:</span>{" "}
-                    {activeRightAfterVersionLabel ? (
-                      <>
-                        <span className="font-medium text-foreground">{activeRightAfterVersionLabel}</span>
-                        <span className="text-muted-foreground">
-                          {" "}
-                          — the image for whatever you selected in <span className="font-medium text-foreground">Right (after)</span>{" "}
-                          above. Change that dropdown first if you want to tweak a different version.
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        the preview selected in <span className="font-medium text-foreground">Right (after)</span> above.
-                      </>
-                    )}
-                  </p>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <div
-                      className="space-y-3 rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.07] to-card p-4 shadow-sm sm:p-5"
-                      role="group"
-                      aria-label="Lower cost suggestions"
-                    >
-                      <div className="space-y-2">
-                        {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
-                          const impact = formatTweakImpactBand(row);
-                          return (
-                            <label
-                              key={`save-${idx}-${row.text.slice(0, 24)}`}
-                              className="flex cursor-pointer gap-3 rounded-xl border border-border/70 bg-background px-3 py-3 shadow-sm transition-colors hover:border-emerald-500/35 has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-500/[0.08] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                            >
-                              <input
-                                type="checkbox"
-                                name="save_money_option"
-                                value={row.text}
-                                disabled={regenPending}
-                                className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-input accent-emerald-600"
-                              />
-                              <div className="min-w-0 flex-1 space-y-1.5 text-left">
-                                <span className="text-[15px] leading-snug text-foreground sm:text-sm">
-                                  <span className="font-semibold text-renovision-navy">{idx + 1}.</span> {row.text}
-                                </span>
-                                {impact ? (
-                                  <span className="inline-flex max-w-full rounded-full bg-emerald-600/12 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-emerald-900 dark:text-emerald-300">
-                                    {impact}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </label>
-                          );
-                        })}
+                  {(generation.saveMoneySuggestions?.length ?? 0) > 0 ||
+                  (generation.improveDesignSuggestions?.length ?? 0) > 0 ? (
+                    <details className="group rounded-xl border border-border/70 bg-muted/20">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/40 sm:px-4 [&::-webkit-details-marker]:hidden">
+                        <span className="text-sm font-semibold text-foreground">Lower cost or improve design</span>
+                        <ChevronDown
+                          className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </summary>
+                      <div className="border-t border-border/60 px-3 pb-3 pt-3 sm:px-4">
+                        <div className="space-y-2">
+                          {(generation.saveMoneySuggestions ?? []).map((row, idx) => {
+                            const impact = formatTweakImpactBand(row);
+                            return (
+                              <label
+                                key={`save-${idx}-${row.text.slice(0, 24)}`}
+                                className="flex cursor-pointer gap-2.5 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-emerald-500/35 has-[:checked]:border-emerald-500/45 has-[:checked]:bg-emerald-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                              >
+                                <input
+                                  type="checkbox"
+                                  name="save_money_option"
+                                  value={row.text}
+                                  disabled={regenPending}
+                                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-emerald-600"
+                                />
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <span className="text-sm leading-snug text-foreground">{row.text}</span>
+                                  {impact ? (
+                                    <span className="inline-flex max-w-full rounded-full bg-emerald-600/12 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-900 dark:text-emerald-300">
+                                      {impact}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </label>
+                            );
+                          })}
+                          {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
+                            const impact = formatTweakImpactBand(row);
+                            return (
+                              <label
+                                key={`design-${idx}-${row.text.slice(0, 24)}`}
+                                className="flex cursor-pointer gap-2.5 rounded-lg border border-border/70 bg-background px-3 py-2.5 text-left transition-colors hover:border-amber-500/35 has-[:checked]:border-amber-500/45 has-[:checked]:bg-amber-500/[0.06] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
+                              >
+                                <input
+                                  type="checkbox"
+                                  name="improve_design_option"
+                                  value={row.text}
+                                  disabled={regenPending}
+                                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-input accent-amber-600"
+                                />
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <span className="text-sm leading-snug text-foreground">{row.text}</span>
+                                  {impact ? (
+                                    <span className="inline-flex max-w-full rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-300">
+                                      {impact}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    </details>
+                  ) : null}
 
-                    <div
-                      className="space-y-3 rounded-2xl border border-amber-500/25 bg-gradient-to-b from-amber-500/[0.07] to-card p-4 shadow-sm sm:p-5"
-                      role="group"
-                      aria-label="Improve design suggestions"
-                    >
-                      <div className="space-y-2">
-                        {(generation.improveDesignSuggestions ?? []).map((row, idx) => {
-                          const impact = formatTweakImpactBand(row);
-                          return (
-                            <label
-                              key={`design-${idx}-${row.text.slice(0, 24)}`}
-                              className="flex cursor-pointer gap-3 rounded-xl border border-border/70 bg-background px-3 py-3 shadow-sm transition-colors hover:border-amber-500/35 has-[:checked]:border-amber-500/50 has-[:checked]:bg-amber-500/[0.08] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"
-                            >
-                              <input
-                                type="checkbox"
-                                name="improve_design_option"
-                                value={row.text}
-                                disabled={regenPending}
-                                className="mt-0.5 h-5 w-5 shrink-0 rounded-md border-input accent-amber-600"
-                              />
-                              <div className="min-w-0 flex-1 space-y-1.5 text-left">
-                                <span className="text-[15px] leading-snug text-foreground sm:text-sm">
-                                  <span className="font-semibold text-renovision-navy">{idx + 1}.</span> {row.text}
-                                </span>
-                                {impact ? (
-                                  <span className="inline-flex max-w-full rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-amber-950 dark:text-amber-300">
-                                    {impact}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-muted/25 p-4 sm:p-5">
+                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3 sm:p-4">
                     <Label htmlFor="try-custom-tweak" className="text-sm font-semibold text-foreground">
-                      Custom design notes (optional)
+                      Advanced: Describe your own changes
                     </Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Tell Renovision what to change in this mockup, like materials, colors, fixtures, or layout details.
-                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">Optional — materials, colors, fixtures, or layout.</p>
                     <Textarea
                       id="try-custom-tweak"
                       name="custom_tweak"
-                      rows={4}
+                      rows={3}
                       maxLength={1200}
                       disabled={regenPending}
-                      placeholder="Example: Keep the same layout, add warm wood vanity, matte black fixtures, and larger mirror lighting."
-                      className="mt-3 min-h-[6.5rem] resize-y rounded-xl border-border/80 bg-background text-[15px] leading-relaxed sm:min-h-[5.5rem] sm:text-sm"
+                      placeholder="Example: Warmer wood vanity, matte black fixtures, larger mirror."
+                      className="mt-2 min-h-[4.5rem] resize-y rounded-lg border-border/80 bg-background text-sm leading-relaxed"
                     />
                   </div>
 
-                  <div className="flex flex-col gap-3 border-t border-border/60 pt-5">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                      <Button type="submit" disabled={regenPending} className="h-12 w-full rounded-xl text-base font-semibold shadow-md sm:h-11 sm:min-w-[11rem]">
-                        {regenPending ? "Updating preview…" : "Update preview"}
-                      </Button>
-                    </div>
-                  </div>
+                  <Button
+                    type="submit"
+                    disabled={regenPending}
+                    className="h-11 w-full rounded-xl text-sm font-semibold shadow-sm sm:min-w-[11rem]"
+                  >
+                    {regenPending ? "Applying…" : "Apply changes"}
+                  </Button>
                 </form>
                 {regenState && "error" in regenState ? (
                   <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -1166,7 +956,6 @@ export function HomeownerTryClient({
                     setSelectedStyle("spa_retreat");
                     setLeadSubmitted(false);
                     setLeadOpen(false);
-                    setCompareBeforeSelection("original");
                     setFirstUploadPreviewUrl(null);
                     setLoaderBeforeBlob(null);
                     setTryResultCustomizeOpen(false);
