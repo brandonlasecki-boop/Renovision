@@ -51,6 +51,8 @@ export async function findHomeownerTryProjectForContext(opts: {
         "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error, attribution",
       )
       .eq("user_id", opts.userId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (error) {
       throw new Error(error.message);
@@ -64,6 +66,8 @@ export async function findHomeownerTryProjectForContext(opts: {
         "id, anonymous_session_id, user_id, before_storage_path, scope_description, ai_summary, material_estimate, ai_status, ai_last_error, attribution",
       )
       .eq("anonymous_session_id", opts.anonymousSessionId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (error) {
       throw new Error(error.message);
