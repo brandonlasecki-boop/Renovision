@@ -279,6 +279,8 @@ export function HomeownerTryClient({
   const uploadFormRef = useRef<HTMLFormElement>(null);
   /** Set after mount so SSR HTML matches; enables camera-facing hint on phones without forcing desktop pickers. */
   const [tryPhotoCapture, setTryPhotoCapture] = useState<"environment" | undefined>(undefined);
+  /** Result step: show minimal “wow” first; reveal style, AI tweaks, cost, etc. after user opts in. */
+  const [tryResultCustomizeOpen, setTryResultCustomizeOpen] = useState(false);
 
   async function compressThenGenerate(
     prev: Awaited<ReturnType<typeof generateBathroomMockupAction>> | undefined,
@@ -320,6 +322,7 @@ export function HomeownerTryClient({
     if (!restoredGeneration) return;
     setGeneration(restoredGeneration);
     setCompareBeforeSelection("original");
+    setTryResultCustomizeOpen(false);
     setStep("result");
   }, [restoredGeneration]);
 
@@ -338,6 +341,7 @@ export function HomeownerTryClient({
     setCompareBeforeSelection("original");
     setFirstUploadPreviewUrl(null);
     setLoaderBeforeBlob(null);
+    setTryResultCustomizeOpen(false);
     setStep("upload");
   }, [startNewProject, startNewToken, setLoaderBeforeBlob]);
 
@@ -348,6 +352,7 @@ export function HomeownerTryClient({
       setStep("result");
       setFirstUploadPreviewUrl(null);
       setLoaderBeforeBlob(null);
+      setTryResultCustomizeOpen(false);
       trackEvent("remodel_generated");
       trackEvent("upload_completed", { style: generateState.selectedStyle });
     }
@@ -633,9 +638,9 @@ export function HomeownerTryClient({
 
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8">
         <header className="space-y-2">
-          {step === "result" ? (
+          {step === "result" && tryResultCustomizeOpen ? (
             <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
-          ) : (
+          ) : step === "upload" ? (
             <>
               <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">Preview your bathroom remodel</h1>
               <p className="text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
@@ -643,7 +648,7 @@ export function HomeownerTryClient({
               </p>
               <p className="text-xs font-medium text-muted-foreground sm:text-sm">No signup • Takes 2 min • Private</p>
             </>
-          )}
+          ) : null}
         </header>
 
         {step === "upload" ? (
@@ -795,6 +800,29 @@ export function HomeownerTryClient({
 
         {step === "result" && generation ? (
           <section className="space-y-6">
+            <div className="space-y-4 text-center sm:space-y-5">
+              <h2 className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                Here&apos;s your remodeled bathroom
+              </h2>
+              {versionState && "error" in versionState ? (
+                <p className="text-sm text-destructive">{versionState.error}</p>
+              ) : null}
+              <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
+              {!tryResultCustomizeOpen ? (
+                <div className="flex justify-center pt-1">
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="h-12 min-w-[14rem] rounded-xl px-8 text-base font-semibold shadow-md"
+                    onClick={() => setTryResultCustomizeOpen(true)}
+                  >
+                    Explore options
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+            {tryResultCustomizeOpen ? (
+            <>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Like this direction? We can help you explore next steps.</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-4">
@@ -815,10 +843,6 @@ export function HomeownerTryClient({
                     label="Right (after)"
                   />
                 </div>
-              {versionState && "error" in versionState ? (
-                <p className="text-sm text-destructive">{versionState.error}</p>
-              ) : null}
-              <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
               <div className="space-y-2 pt-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Style</p>
                 <p className="text-xs text-muted-foreground">
@@ -1145,6 +1169,7 @@ export function HomeownerTryClient({
                     setCompareBeforeSelection("original");
                     setFirstUploadPreviewUrl(null);
                     setLoaderBeforeBlob(null);
+                    setTryResultCustomizeOpen(false);
                     setStep("upload");
                   }}
                 >
@@ -1187,6 +1212,8 @@ export function HomeownerTryClient({
                 <p className="text-xs text-muted-foreground">No contractor contact unless you request it.</p>
               </div>
             </div>
+            </>
+            ) : null}
           </section>
         ) : null}
 
