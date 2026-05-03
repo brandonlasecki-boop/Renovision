@@ -15,7 +15,7 @@ export type LandingDemoStyleOption = {
   after: StaticImageData;
 };
 
-/** Shared marketing before + style-specific after renders for hero + scroll demo sections. */
+/** Shared marketing before + style-specific after renders for the hero interactive demo. */
 export const LANDING_DEMO_BEFORE = beforeMain;
 
 export const LANDING_DEMO_STYLE_OPTIONS: LandingDemoStyleOption[] = [

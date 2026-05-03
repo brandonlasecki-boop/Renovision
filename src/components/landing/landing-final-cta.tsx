@@ -6,7 +6,7 @@ export function LandingFinalCta() {
   return (
     <section
       id="get-started"
-      className="relative scroll-mt-24 overflow-hidden px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+      className="relative hidden scroll-mt-24 overflow-hidden px-4 py-20 sm:px-6 sm:py-28 md:block lg:px-8"
     >
       <div
         className="absolute inset-0 bg-gradient-to-b from-background via-renovision-navy-muted/25 to-renovision-navy-muted/50"

@@ -65,7 +65,9 @@ export function LandingWhy() {
           ))}
         </ul>
 
-        <LandingTryCta placement="landing_why" />
+        <div className="hidden md:block">
+          <LandingTryCta placement="landing_why" />
+        </div>
       </div>
     </section>
   );

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { RenovisionLogo } from "@/components/landing/renovision-logo";
-import { TryCtaLink } from "@/components/landing/try-cta-link";
+import { TryCtaLink, TRY_FLOW_UPLOAD_HREF } from "@/components/landing/try-cta-link";
 
 export function LandingFooter() {
   return (
@@ -14,15 +14,32 @@ export function LandingFooter() {
           </p>
         </div>
         <nav
-          className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-sm"
+          className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-2 sm:text-sm"
           aria-label="Footer"
         >
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm md:hidden">
+            <a
+              href="#how-it-works"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              How it works
+            </a>
+            <a
+              href="#why-renovision"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Why Renovision
+            </a>
+            <a href="#faq" className="text-muted-foreground transition-colors hover:text-foreground">
+              FAQ
+            </a>
+          </div>
           <TryCtaLink
             placement="landing_footer"
-            href="/try"
-            className="font-semibold text-renovision-navy transition-colors hover:text-renovision-navy/80 dark:text-renovision-orange dark:hover:text-renovision-orange/90"
+            href={TRY_FLOW_UPLOAD_HREF}
+            className="hidden font-semibold text-renovision-navy transition-colors hover:text-renovision-navy/80 dark:text-renovision-orange dark:hover:text-renovision-orange/90 md:inline-flex md:items-center"
           >
-            Start free preview
+            See My Bathroom Instantly
           </TryCtaLink>
           <Link
             href="/privacy"

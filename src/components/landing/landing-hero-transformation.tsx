@@ -7,8 +7,7 @@ import {
   LANDING_DEMO_BEFORE,
   LANDING_DEMO_STYLE_OPTIONS,
 } from "@/components/landing/landing-demo-style-options";
-import { TryCtaLink } from "@/components/landing/try-cta-link";
-import { buttonVariants } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics/google-ads";
 import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
 import type { BathroomStyleId } from "@/lib/homeowner-try/bathroom-styles";
 import { cn } from "@/lib/utils";
@@ -20,7 +19,9 @@ const CUE_MS = 900;
 const MOBILE_MQ = "(max-width: 767px)";
 /** Mobile: timed wipe duration once triggered. */
 const MOBILE_AUTO_MS = 1800;
-/** Desktop + mobile: scrub / timed wipe begins only after this scroll offset (first scroll). */
+/** Mobile: delay after mount before the wipe animation starts (no scroll required). */
+const MOBILE_AUTO_START_MS = 500;
+/** Desktop: scrub begins only after this scroll offset (first scroll). */
 const FIRST_SCROLL_PX = 2;
 /** Desktop: treat card as “centered” when within this many px of viewport midline. */
 const VIEWPORT_CENTER_TOL_PX = 14;
@@ -33,15 +34,12 @@ function smootherstep(t: number): number {
 }
 
 /**
- * Homepage transformation: desktop maps wipe progress to bringing the compare card to viewport center
- * (starts after first scroll); mobile runs a timed wipe after first scroll (sticky scroll is unreliable).
+ * Homepage hero transformation: desktop maps wipe progress to bringing the compare card to viewport center
+ * (starts after first scroll); mobile runs a timed wipe shortly after load (no scroll).
  */
-export function LandingScrollTransformationSection() {
-  const sectionRef = useRef<HTMLElement>(null);
+export function LandingHeroTransformation() {
   const cardRef = useRef<HTMLDivElement>(null);
-  /** Desktop: signed distance from viewport center (px) sampled on first scroll — maps linearly to centered. */
   const desktopCenterErr0Ref = useRef<number | null>(null);
-  /** Card viewport rect before the tall scroll track collapses (desktop cue phase only). */
   const cueBeforeRectRef = useRef<{ top: number; left: number } | null>(null);
   const cueScrollAppliedRef = useRef(false);
 
@@ -89,7 +87,6 @@ export function LandingScrollTransformationSection() {
     }
   }, [reduceMotion]);
 
-  /** Desktop: scrub 0→1 from first scroll until the compare card is vertically centered (no tall fake track). */
   useEffect(() => {
     if (reduceMotion || isMobile) return;
 
@@ -143,17 +140,13 @@ export function LandingScrollTransformationSection() {
     };
   }, [reduceMotion, isMobile]);
 
-  /**
-   * Mobile: start the timed wipe on the first real scroll (or immediately if the page is already scrolled).
-   */
   useEffect(() => {
     if (reduceMotion || !isMobile || phase !== "scroll") return;
 
-    let tickRaf = 0;
     let wipeRaf = 0;
 
     const runWipe = () => {
-      if (mobileAnimStartedRef.current) return;
+      if (mobileAnimStartedRef.current || phaseRef.current !== "scroll") return;
       mobileAnimStartedRef.current = true;
       const start = performance.now();
       const step = (now: number) => {
@@ -164,27 +157,11 @@ export function LandingScrollTransformationSection() {
       wipeRaf = requestAnimationFrame(step);
     };
 
-    const winScrollY = () =>
-      window.scrollY || document.documentElement?.scrollTop || 0;
+    const startTimer = window.setTimeout(runWipe, MOBILE_AUTO_START_MS);
 
-    const check = () => {
-      if (mobileAnimStartedRef.current || phaseRef.current !== "scroll") return;
-      if (winScrollY() > FIRST_SCROLL_PX) runWipe();
-    };
-
-    const onScrollOrResize = () => {
-      cancelAnimationFrame(tickRaf);
-      tickRaf = requestAnimationFrame(check);
-    };
-
-    check();
-    window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize, { passive: true });
     return () => {
-      cancelAnimationFrame(tickRaf);
+      window.clearTimeout(startTimer);
       cancelAnimationFrame(wipeRaf);
-      window.removeEventListener("scroll", onScrollOrResize);
-      window.removeEventListener("resize", onScrollOrResize);
     };
   }, [reduceMotion, isMobile, phase]);
 
@@ -201,7 +178,6 @@ export function LandingScrollTransformationSection() {
     }
   }, [scrub, phase, reduceMotion, isMobile]);
 
-  /** Desktop cue: small layout snap correction when transitioning out of scroll-driven scrub (usually minimal). */
   useLayoutEffect(() => {
     if (isMobile) return;
     if (phase !== "cue") {
@@ -232,20 +208,13 @@ export function LandingScrollTransformationSection() {
 
   const passivePct = Math.round(100 * scrub);
 
-  const scrollPhaseSubtitle =
-    phase === "interactive"
-      ? "Same bathroom — pick a style and drag the slider to compare."
-      : isMobile
-        ? "Watch the Spa makeover, then try other styles on this room."
-        : "See the Spa makeover on this bathroom, then try other styles on this room.";
-
   const cardChromeTitle =
     phase === "interactive"
       ? "Compare styles on this bathroom"
       : "Real bathroom · Spa style";
 
   const interactivePills = (
-    <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+    <div className="-mx-0.5 flex gap-1.5 overflow-x-auto pb-1 max-[430px]:gap-1 sm:flex-wrap sm:gap-2 sm:overflow-visible">
       {LANDING_DEMO_STYLE_OPTIONS.map((opt) => {
         const selected = opt.id === styleId;
         return (
@@ -253,9 +222,12 @@ export function LandingScrollTransformationSection() {
             key={opt.id}
             type="button"
             title={getBathroomStyleById(opt.id)?.name ?? opt.pill}
-            onClick={() => setStyleId(opt.id)}
+            onClick={() => {
+              trackEvent("style_selected", { style: opt.id });
+              setStyleId(opt.id);
+            }}
             className={cn(
-              "shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors",
+              "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors max-[430px]:px-2 max-[430px]:text-[10px] sm:px-3.5 sm:py-1.5 sm:text-xs",
               selected
                 ? "border-renovision-orange bg-renovision-orange/15 text-renovision-navy shadow-sm"
                 : "border-border/80 bg-background text-muted-foreground hover:border-renovision-orange/40 hover:text-foreground",
@@ -270,7 +242,7 @@ export function LandingScrollTransformationSection() {
   );
 
   const interactiveBlock = (
-    <div className="motion-safe:animate-landing-interactive-pop space-y-3 motion-reduce:animate-none sm:space-y-4">
+    <div className="motion-safe:animate-landing-interactive-pop space-y-2 motion-reduce:animate-none sm:space-y-2 md:space-y-3">
       {interactivePills}
       <BeforeAfterCompareSlider
         key={styleId}
@@ -280,19 +252,6 @@ export function LandingScrollTransformationSection() {
         compactVariant="hero"
         initialSliderPct={100}
       />
-      <div className="pt-2 text-center">
-        <TryCtaLink
-          placement="landing_scroll_transformation_followup"
-          href="/try"
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "inline-flex h-[52px] min-h-[52px] w-full max-w-md items-center justify-center bg-renovision-navy px-6 text-base font-semibold text-white shadow-md shadow-renovision-navy/20 hover:bg-renovision-navy/90 sm:mx-auto sm:w-auto sm:px-8",
-          )}
-        >
-          Start My Bathroom Preview (Free)
-        </TryCtaLink>
-        <p className="mt-3 text-sm text-muted-foreground">Just upload a photo — takes under 2 minutes</p>
-      </div>
     </div>
   );
 
@@ -326,19 +285,13 @@ export function LandingScrollTransformationSection() {
         phase === "interactive" && "ring-2 ring-renovision-orange/35 shadow-xl",
       )}
     >
-      {/* Mobile scroll/cue: hide duplicate bar — H2 above already introduces the block; saves vertical gap. */}
-      <div
-        className={cn(
-          "border-b border-border/60 bg-muted/25 px-3 py-2 text-center sm:px-4 sm:py-3",
-          isMobile && phase !== "interactive" && "hidden",
-        )}
-      >
-        <p className="text-sm font-semibold text-renovision-navy">{cardChromeTitle}</p>
+      <div className="border-b border-border/60 bg-muted/25 px-2 py-1.5 text-center sm:px-3 sm:py-2 md:px-4">
+        <p className="text-xs font-semibold text-renovision-navy sm:text-sm">{cardChromeTitle}</p>
       </div>
       <div
         className={cn(
-          "sm:p-5",
-          phase === "interactive" ? "p-3" : isMobile ? "p-0" : "p-4",
+          "sm:p-3",
+          phase === "interactive" ? "p-2 sm:p-2.5" : isMobile ? "p-0" : "p-3 sm:p-4",
         )}
       >
         {phase === "interactive" ? interactiveBlock : scrollPhaseBlock}
@@ -347,42 +300,13 @@ export function LandingScrollTransformationSection() {
   );
 
   return (
-    <section
-      ref={sectionRef}
-      id="watch-transformation"
-      aria-labelledby="watch-transformation-heading"
-      className="scroll-mt-16 border-b border-border/40 bg-gradient-to-b from-background via-[#faf8f4]/40 to-background sm:scroll-mt-24"
-    >
-      <div
-        className={cn(
-          "mx-auto max-w-6xl px-4 pt-2 text-center sm:px-6 sm:pb-4 sm:pt-8 lg:px-8",
-          isMobile && phase === "interactive" ? "pb-4" : "pb-0",
-        )}
-      >
-        <h2
-          id="watch-transformation-heading"
-          className="text-balance text-xl font-semibold tracking-tight text-foreground sm:text-3xl"
-        >
-          Watch a Real Bathroom Transformation
-        </h2>
-        <p
-          className={cn(
-            "mx-auto max-w-2xl text-pretty text-sm leading-snug text-muted-foreground sm:mt-2 sm:text-base",
-            isMobile && phase === "interactive" ? "mt-2 pb-1" : "mt-0",
-          )}
-        >
-          {scrollPhaseSubtitle}
-        </p>
-      </div>
-
+    <div className="w-full max-md:-mt-0.5" aria-label="Interactive bathroom style preview">
       {!isMobile ? (
-        <div className="relative -mt-3 sm:-mt-3">
+        <div className="relative sm:-mt-1">
           <div
             className={cn(
-              "z-10 flex w-full justify-center px-3 sm:px-6",
-              phase === "scroll"
-                ? "relative items-start py-3 sm:py-5"
-                : "relative items-start py-5 sm:py-10",
+              "z-10 flex w-full justify-center px-0 sm:px-2",
+              phase === "scroll" ? "relative items-start py-2 sm:py-3" : "relative items-start py-3 sm:py-6",
             )}
           >
             <div ref={cardRef} className="w-full max-w-2xl scroll-mt-20 sm:scroll-mt-24">
@@ -393,15 +317,15 @@ export function LandingScrollTransformationSection() {
       ) : (
         <div
           className={cn(
-            "mx-auto max-w-6xl px-3 pb-2 sm:px-6 lg:px-8",
-            phase === "interactive" ? "mt-4 pt-0" : "-mt-5 pt-0",
+            "mx-auto max-w-6xl px-0 pb-0 sm:px-2",
+            phase === "interactive" ? "mt-2 pt-0" : "-mt-0.5 pt-0",
           )}
         >
-          <div ref={cardRef} className="mx-auto max-w-2xl scroll-mt-14 sm:scroll-mt-24">
+          <div ref={cardRef} className="mx-auto max-w-2xl scroll-mt-12 sm:scroll-mt-24">
             {cardShell}
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }

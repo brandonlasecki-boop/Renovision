@@ -64,7 +64,9 @@ export function LandingTestimonials() {
           ))}
         </div>
 
-        <LandingTryCta placement="landing_testimonials" />
+        <div className="hidden md:block">
+          <LandingTryCta placement="landing_testimonials" />
+        </div>
       </div>
     </section>
   );

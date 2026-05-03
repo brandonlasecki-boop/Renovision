@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import logoTransPng from "../../../Images/logo_trans.png";
+import logoTransPng from "../../../Images/logo_trans1.png";
 
 /**
  * Prefer `public/renovision-looping-logo.webm`: VP9 WebM with a green plate, keyed out on canvas over the photo.

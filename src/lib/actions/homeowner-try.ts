@@ -2152,7 +2152,7 @@ export async function generateBathroomMockupAction(
   const generatedSignedUrl = generatedSigned.data.signedUrl;
 
   const generationId = randomUUID();
-  await svc.from("bathroom_generations").insert({
+  const { error: genInsertError } = await svc.from("bathroom_generations").insert({
     id: generationId,
     session_id: viewer.anonymousSessionId,
     user_id: viewer.userId,
@@ -2169,6 +2169,14 @@ export async function generateBathroomMockupAction(
     lead_submitted: false,
     attribution: incomingAttribution,
   });
+  if (genInsertError) {
+    console.error("[try] bathroom_generations insert failed:", genInsertError);
+    return {
+      error:
+        "Your preview was created but could not be saved to your account. This is usually a database configuration issue — confirm Supabase migrations are applied and `SUPABASE_SERVICE_ROLE_KEY` is set. Details: " +
+        genInsertError.message,
+    };
+  }
 
   const styleIdForAfter = style.id;
   after(async () => {

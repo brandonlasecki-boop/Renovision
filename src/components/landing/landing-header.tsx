@@ -1,7 +1,8 @@
 import Link from "next/link";
 
+import { LandingMobileNav } from "@/components/landing/landing-mobile-nav";
 import { RenovisionLogo } from "@/components/landing/renovision-logo";
-import { TryCtaLink } from "@/components/landing/try-cta-link";
+import { TryCtaLink, TRY_FLOW_UPLOAD_HREF } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import { resolveViewerIsAdmin } from "@/lib/admin/resolve-viewer-admin";
 import { signOut } from "@/lib/actions/auth";
@@ -22,22 +23,18 @@ export async function LandingHeader() {
   const guestHasTrySession = !user && (await getRenovisionAnonymousSessionIdFromCookie());
 
   return (
-    <header className="sticky top-0 z-50 min-w-0 max-w-full overflow-x-hidden border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-      <div className="mx-auto max-w-6xl min-w-0 px-3 py-1 sm:px-6 sm:py-1 lg:px-8">
+    <header className="sticky top-0 z-50 min-w-0 max-w-full overflow-x-hidden overflow-y-visible border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+      <div className="mx-auto max-w-6xl min-w-0 px-3 py-0 sm:px-6 lg:px-8">
         <div className="flex min-h-0 min-w-0 items-center justify-between gap-2 py-0 sm:gap-3">
           <Link
             href="/"
             className={cn(
-              "relative block min-w-0 max-w-[56%] overflow-hidden sm:max-w-none",
-              "h-9 sm:h-10 sm:w-[300px] md:w-[360px] lg:w-[400px]",
+              "relative block min-w-0 shrink-0 overflow-visible",
+              "h-12 w-[188px] sm:w-[340px]",
+              "md:h-[4.75rem] md:w-[420px] lg:h-[5rem] lg:w-[480px]",
             )}
           >
-            <RenovisionLogo
-              className={cn(
-                "absolute left-0 top-1/2 max-w-none -translate-y-1/2",
-                "h-12 w-[260px] sm:h-16 sm:w-[340px] md:h-[4.25rem] md:w-[400px] lg:h-[4.5rem] lg:w-[440px]",
-              )}
-            />
+            <RenovisionLogo preset="header" />
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
@@ -52,7 +49,12 @@ export async function LandingHeader() {
             </a>
           </nav>
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:max-w-none sm:flex-none sm:gap-3">
+          <LandingMobileNav
+            showMyProjects={Boolean(user || guestHasTrySession)}
+            showAdmin={showAdminNav}
+            isLoggedIn={Boolean(user)}
+          />
+          <div className="hidden min-w-0 flex-1 flex-wrap items-center justify-end gap-1 sm:max-w-none sm:flex-none sm:gap-3 md:flex">
             {user || guestHasTrySession ? (
               <Link
                 href="/projects"
@@ -100,14 +102,14 @@ export async function LandingHeader() {
             )}
             <TryCtaLink
               placement="landing_header"
-              href="/try"
+              href={TRY_FLOW_UPLOAD_HREF}
               className={cn(
                 buttonVariants({ size: "sm" }),
                 "max-w-[9rem] whitespace-normal px-2 text-center text-[10px] font-semibold leading-tight max-sm:h-6 max-sm:min-h-0 max-sm:py-0 sm:max-w-none sm:px-4 sm:text-sm sm:leading-none",
               )}
             >
-              <span className="sm:hidden">Start preview</span>
-              <span className="hidden sm:inline">See a Preview of My Bathroom Remodel</span>
+              <span className="sm:hidden">See instantly</span>
+              <span className="hidden sm:inline">See My Bathroom Instantly</span>
             </TryCtaLink>
           </div>
         </div>

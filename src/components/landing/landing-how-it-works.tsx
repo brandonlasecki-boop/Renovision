@@ -41,42 +41,42 @@ export function LandingHowItWorks() {
         aria-hidden
       />
       <div className="relative mx-auto max-w-6xl">
-        <div className="mx-auto max-w-2xl text-center sm:mx-0 sm:text-left">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-renovision-orange">
+        <div className="mx-auto max-w-2xl text-center md:mx-0 md:text-left">
+          <p className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-renovision-orange sm:text-xs sm:tracking-[0.2em] md:block">
             Three steps
           </p>
-          <h2 className="mt-2 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-[2.5rem] lg:leading-tight">
+          <h2 className="mt-2 text-balance text-2xl font-semibold leading-snug tracking-tight text-foreground sm:text-3xl sm:leading-tight md:mt-2 md:text-4xl lg:text-[2.5rem] lg:leading-tight">
             How It Works
           </h2>
-          <p className="mt-4 text-pretty text-lg leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-pretty text-sm leading-relaxed text-muted-foreground max-md:text-center sm:text-base md:mt-4 md:text-lg">
             A simple planning path from your real bathroom to a confident hire. Contractor connection is always optional—you
             stay in control.
           </p>
         </div>
 
-        <div className="relative mt-16 md:mt-20">
+        <div className="relative mt-8 max-md:mt-8 md:mt-20">
           <div
             className="pointer-events-none absolute left-0 right-0 top-14 hidden h-px bg-gradient-to-r from-transparent via-border to-transparent md:block"
             aria-hidden
           />
-          <div className="grid gap-8 md:grid-cols-3 md:gap-6 lg:gap-8">
+          <div className="grid gap-5 md:grid-cols-3 md:gap-6 lg:gap-8">
             {steps.map(({ step, title, description, icon: Icon }) => (
               <div
                 key={step}
-                className="group relative flex flex-col rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 p-8 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.25)] ring-1 ring-black/[0.04] transition-all duration-300 hover:border-renovision-orange/25 hover:shadow-[0_24px_60px_-20px_rgba(232,126,55,0.15)] dark:ring-white/[0.06]"
+                className="group relative flex flex-col rounded-2xl border border-border/50 bg-gradient-to-b from-card to-card/80 p-6 shadow-[0_16px_44px_-22px_rgba(15,23,42,0.22)] ring-1 ring-black/[0.04] transition-all duration-300 hover:border-renovision-orange/25 hover:shadow-[0_24px_60px_-20px_rgba(232,126,55,0.15)] max-md:text-center md:rounded-3xl md:p-8 dark:ring-white/[0.06]"
               >
-                <div className="mb-6 flex items-start justify-between gap-3">
-                  <span className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-renovision-navy to-renovision-navy/90 text-white shadow-lg shadow-renovision-navy/25 ring-2 ring-white/10">
-                    <Icon className="size-6" strokeWidth={1.5} />
+                <div className="mb-4 flex items-start justify-between gap-3 max-md:mx-auto max-md:max-w-[14rem] max-md:flex-col max-md:items-center md:mb-6 md:flex-row md:justify-between">
+                  <span className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-renovision-navy to-renovision-navy/90 text-white shadow-lg shadow-renovision-navy/25 ring-2 ring-white/10 md:size-14">
+                    <Icon className="size-5 md:size-6" strokeWidth={1.5} />
                   </span>
-                  <span className="flex size-9 items-center justify-center rounded-full border border-border/80 bg-muted/50 text-sm font-bold tabular-nums text-renovision-navy">
+                  <span className="flex size-8 items-center justify-center rounded-full border border-border/80 bg-muted/50 text-xs font-bold tabular-nums text-renovision-navy md:size-9 md:text-sm">
                     {step}
                   </span>
                 </div>
-                <h3 className="text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl">
+                <h3 className="text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg md:text-xl">
                   {title}
                 </h3>
-                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground sm:text-[15px]">
+                <p className="mt-2 flex-1 text-[13px] leading-relaxed text-muted-foreground sm:text-sm md:mt-3 md:text-[15px]">
                   {description}
                 </p>
               </div>
@@ -84,7 +84,9 @@ export function LandingHowItWorks() {
           </div>
         </div>
 
-        <LandingTryCta align="left" placement="landing_how_it_works" />
+        <div className="hidden md:block">
+          <LandingTryCta align="left" placement="landing_how_it_works" />
+        </div>
       </div>
     </section>
   );

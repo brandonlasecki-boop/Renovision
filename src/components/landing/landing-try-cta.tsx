@@ -1,4 +1,4 @@
-import { TryCtaLink } from "@/components/landing/try-cta-link";
+import { TryCtaLink, TRY_FLOW_UPLOAD_HREF } from "@/components/landing/try-cta-link";
 import { buttonVariants } from "@/components/ui/button";
 import type { TryCtaPlacement } from "@/lib/analytics/try-cta";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ export function LandingTryCta({
       </p>
       <TryCtaLink
         placement={placement}
-        href="/try"
+        href={TRY_FLOW_UPLOAD_HREF}
         className={cn(
           buttonVariants({ size: "lg" }),
           "mt-5 inline-flex h-12 bg-renovision-navy px-8 text-base font-semibold text-white shadow-md shadow-renovision-navy/15 transition hover:bg-renovision-navy/90",

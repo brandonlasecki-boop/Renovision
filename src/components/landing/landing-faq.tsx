@@ -66,7 +66,9 @@ export function LandingFaq() {
           ))}
         </div>
 
-        <LandingTryCta placement="landing_faq" />
+        <div className="hidden md:block">
+          <LandingTryCta placement="landing_faq" />
+        </div>
       </div>
     </section>
   );

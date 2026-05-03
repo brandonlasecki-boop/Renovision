@@ -363,6 +363,7 @@ export function HomeownerTryClient({
       setFirstUploadPreviewUrl(null);
       setLoaderBeforeBlob(null);
       trackEvent("remodel_generated");
+      trackEvent("upload_completed", { style: generateState.selectedStyle });
     }
   }, [generateState, setLoaderBeforeBlob]);
 
@@ -786,6 +787,7 @@ export function HomeownerTryClient({
                         className="h-11 w-full rounded-xl"
                         onClick={() => {
                           setQuickStyleSwitchMode(false);
+                          trackEvent("style_selected", { style: style.id });
                           setSelectedStyle(style.id);
                           setStep("upload");
                         }}
@@ -851,6 +853,7 @@ export function HomeownerTryClient({
                       return;
                     }
                     setQuickStyleSwitchMode(false);
+                    trackEvent("style_selected", { style: "your_vision" });
                     setSelectedStyle("your_vision");
                     setStep("upload");
                   }}
@@ -863,7 +866,13 @@ export function HomeownerTryClient({
         ) : null}
 
         {step === "upload" ? (
-          <form action={generateAction} className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
+          <form
+            action={generateAction}
+            className="space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-sm"
+            onSubmit={() => {
+              trackEvent("upload_started", { style: selectedStyle ?? "unknown" });
+            }}
+          >
             <input type="hidden" name="selected_style" value={selectedStyle ?? ""} />
             <input type="hidden" name="user_description" value={userDescription} />
             <input type="hidden" name="attribution_json" value={attributionJson} />

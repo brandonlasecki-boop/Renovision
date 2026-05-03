@@ -53,6 +53,7 @@ export function BeforeAfterCompareSlider({
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileAspectRatio, setMobileAspectRatio] = useState<number>(4 / 3);
   const imageFitClass = compact ? "object-cover" : isMobileViewport ? "object-cover" : "object-contain";
+  const isHeroCompact = compact && compactVariant === "hero";
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 639px)");
@@ -82,12 +83,16 @@ export function BeforeAfterCompareSlider({
             ? cn(
                 "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm",
                 compactVariant === "hero"
-                  ? "sm:aspect-[16/10] sm:min-h-[17rem] lg:min-h-[19rem]"
+                  ? "sm:aspect-[16/11] sm:min-h-[13rem] lg:min-h-[15rem]"
                   : "sm:aspect-[16/11] sm:min-h-[14rem]",
               )
             : "relative w-full overflow-hidden rounded-xl border border-border/80 bg-muted shadow-sm sm:aspect-[4/3] sm:min-h-[20rem]"
         }
-        style={isMobileViewport ? { aspectRatio: String(mobileAspectRatio) } : undefined}
+        style={
+          isMobileViewport
+            ? { aspectRatio: isHeroCompact ? "16/11" : String(mobileAspectRatio) }
+            : undefined
+        }
         onDoubleClick={
           compact
             ? undefined
