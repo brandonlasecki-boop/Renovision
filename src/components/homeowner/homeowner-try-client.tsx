@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronDown, Upload } from "lucide-react";
+import { Camera, ChevronDown, Upload } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -160,7 +160,9 @@ export function HomeownerTryClient({
     }
   }, []);
   const [storedAttribution, setStoredAttribution] = useState<RenovisionAttribution | null>(null);
-  const bathroomPhotoInputRef = useRef<HTMLInputElement>(null);
+  /** File attached to the form (`name="bathroom_photo"`). Camera flow copies into this input via DataTransfer. */
+  const bathroomPhotoLibraryInputRef = useRef<HTMLInputElement>(null);
+  const bathroomPhotoCameraInputRef = useRef<HTMLInputElement>(null);
   const uploadFormRef = useRef<HTMLFormElement>(null);
   /** Result step: show minimal “wow” first; reveal style, AI tweaks, cost, etc. after user opts in. */
   const [tryResultCustomizeOpen, setTryResultCustomizeOpen] = useState(false);
@@ -236,8 +238,10 @@ export function HomeownerTryClient({
 
   useEffect(() => {
     if (!generateState || !("error" in generateState)) return;
-    const el = bathroomPhotoInputRef.current;
-    if (el) el.value = "";
+    const lib = bathroomPhotoLibraryInputRef.current;
+    const cam = bathroomPhotoCameraInputRef.current;
+    if (lib) lib.value = "";
+    if (cam) cam.value = "";
   }, [generateState]);
 
   const slowGenerationToastMs = 120_000;
@@ -471,6 +475,48 @@ export function HomeownerTryClient({
     styleCardLabelById[styleId] ?? fallback;
   const attributionJson = storedAttribution ? JSON.stringify(storedAttribution) : "";
 
+  function handleBathroomPhotoFileChosen(file: File, via: "camera" | "library") {
+    if (file.size > MAX_TRY_UPLOAD_BYTES) {
+      setFirstUploadPreviewUrl(null);
+      setLoaderBeforeBlob(null);
+      toast.error("Photo is too large.", {
+        description: "Please choose an image under 20 MB or retake at a lower resolution.",
+      });
+      const lib = bathroomPhotoLibraryInputRef.current;
+      const cam = bathroomPhotoCameraInputRef.current;
+      if (lib) lib.value = "";
+      if (cam) cam.value = "";
+      return;
+    }
+    trackEvent("photo_upload_success", {
+      file_type: file.type || "unknown",
+      source: isLikelyMobileBrowser() ? "mobile" : "desktop",
+      via,
+    });
+    const objectUrl = URL.createObjectURL(file);
+    setLoaderBeforeBlob(objectUrl);
+    if (isLikelyHeicUpload(file)) {
+      setFirstUploadPreviewUrl(null);
+      toast.message("Photo added", {
+        description:
+          file.size > MAX_TRY_SERVER_ACTION_UPLOAD_BYTES
+            ? "HEIC selected — if upload fails, try a smaller JPEG."
+            : "HEIC ok — preview may appear after generate.",
+      });
+    } else if (previewAllowed(file)) {
+      setFirstUploadPreviewUrl(objectUrl);
+      toast.success("Photo added");
+    } else {
+      setFirstUploadPreviewUrl(null);
+      toast.message("Photo added", {
+        description: "Large file — thumbnail hidden until your preview is ready.",
+      });
+    }
+    queueMicrotask(() => {
+      uploadFormRef.current?.requestSubmit();
+    });
+  }
+
   return (
     <div className="relative min-h-[70vh]">
       {loading ? (
@@ -547,18 +593,51 @@ export function HomeownerTryClient({
             <input type="hidden" name="attribution_json" value={attributionJson} />
             <input type="hidden" name="start_new_project" value={startNewProject ? "1" : "0"} />
             <div className="space-y-4">
-              <Label htmlFor="bathroom_photo" className="sr-only">
-                Bathroom photo
+              <Label htmlFor="bathroom_photo_camera" className="sr-only">
+                Take bathroom photo with camera
               </Label>
               <input
-                ref={bathroomPhotoInputRef}
+                ref={bathroomPhotoCameraInputRef}
+                id="bathroom_photo_camera"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                aria-label="Take bathroom photo with camera"
+                className="sr-only"
+                tabIndex={-1}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const lib = bathroomPhotoLibraryInputRef.current;
+                  if (!lib) return;
+                  try {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    lib.files = dt.files;
+                  } catch {
+                    toast.error("Could not attach the photo from your camera.", {
+                      description: "Try “Choose from library” with a photo you already took.",
+                    });
+                    e.currentTarget.value = "";
+                    return;
+                  }
+                  e.currentTarget.value = "";
+                  handleBathroomPhotoFileChosen(file, "camera");
+                }}
+              />
+              <Label htmlFor="bathroom_photo" className="sr-only">
+                Choose bathroom photo from your library
+              </Label>
+              <input
+                ref={bathroomPhotoLibraryInputRef}
                 id="bathroom_photo"
                 name="bathroom_photo"
                 type="file"
                 accept="image/*"
                 required
-                aria-label="Bathroom photo to upload"
+                aria-label="Choose bathroom photo from library"
                 className="sr-only"
+                tabIndex={-1}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) {
@@ -566,52 +645,33 @@ export function HomeownerTryClient({
                     // here or the generating loader loses the “before” image mid-request.
                     return;
                   }
-                  if (file.size > MAX_TRY_UPLOAD_BYTES) {
-                    setFirstUploadPreviewUrl(null);
-                    setLoaderBeforeBlob(null);
-                    toast.error("Photo is too large.", {
-                      description: "Please choose an image under 20 MB or retake at a lower resolution.",
-                    });
-                    e.currentTarget.value = "";
-                    return;
-                  }
-                  trackEvent("photo_upload_success", {
-                    file_type: file.type || "unknown",
-                    source: isLikelyMobileBrowser() ? "mobile" : "desktop",
-                  });
-                  const objectUrl = URL.createObjectURL(file);
-                  setLoaderBeforeBlob(objectUrl);
-                  if (isLikelyHeicUpload(file)) {
-                    setFirstUploadPreviewUrl(null);
-                    toast.message("Photo added", {
-                      description:
-                        file.size > MAX_TRY_SERVER_ACTION_UPLOAD_BYTES
-                          ? "HEIC selected — if upload fails, try a smaller JPEG."
-                          : "HEIC ok — preview may appear after generate.",
-                    });
-                  } else if (previewAllowed(file)) {
-                    setFirstUploadPreviewUrl(objectUrl);
-                    toast.success("Photo added");
-                  } else {
-                    setFirstUploadPreviewUrl(null);
-                    toast.message("Photo added", {
-                      description: "Large file — thumbnail hidden until your preview is ready.",
-                    });
-                  }
-                  queueMicrotask(() => {
-                    uploadFormRef.current?.requestSubmit();
-                  });
+                  handleBathroomPhotoFileChosen(file, "library");
                 }}
               />
-              <Button
-                type="button"
-                className="h-16 w-full justify-center gap-2.5 rounded-2xl bg-renovision-navy text-lg font-semibold text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 disabled:opacity-60 sm:h-[4.25rem] sm:text-xl"
-                disabled={generatePending}
-                onClick={() => bathroomPhotoInputRef.current?.click()}
-              >
-                <Upload className="size-6 shrink-0 sm:size-7" aria-hidden />
-                Upload Bathroom Photo
-              </Button>
+              <p className="text-center text-xs text-muted-foreground sm:text-sm">
+                Use your camera for a new shot, or pick a photo you already have.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  className="h-14 w-full justify-center gap-2.5 rounded-2xl bg-renovision-navy text-base font-semibold text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 disabled:opacity-60 sm:h-16 sm:text-lg"
+                  disabled={generatePending}
+                  onClick={() => bathroomPhotoCameraInputRef.current?.click()}
+                >
+                  <Camera className="size-5 shrink-0 sm:size-6" aria-hidden />
+                  Take a photo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-14 w-full justify-center gap-2.5 rounded-2xl border-2 border-renovision-navy/40 bg-background text-base font-semibold text-renovision-navy shadow-sm hover:bg-renovision-navy-muted/30 disabled:opacity-60 sm:h-16 sm:text-lg"
+                  disabled={generatePending}
+                  onClick={() => bathroomPhotoLibraryInputRef.current?.click()}
+                >
+                  <Upload className="size-5 shrink-0 sm:size-6" aria-hidden />
+                  Choose from library
+                </Button>
+              </div>
               {firstUploadPreviewUrl ? (
                 <div className="relative mx-auto aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-muted">
                   <Image

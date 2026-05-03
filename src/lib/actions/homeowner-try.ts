@@ -1935,6 +1935,28 @@ export async function bootstrapTryAnonymousSessionAction(): Promise<
   }
 }
 
+/** Storage / edge gateways sometimes return bare numeric codes — treat as non-actionable for users. */
+function isLikelyOpaqueErrorMessage(message: string): boolean {
+  const t = message.trim();
+  if (!t) return true;
+  if (/^\d{6,}$/.test(t)) return true;
+  const digits = t.replace(/\D/g, "").length;
+  return t.length >= 8 && digits / t.length >= 0.85;
+}
+
+function friendlyTryGenerationFailureMessage(cause: unknown): string {
+  const msg = cause instanceof Error ? cause.message : String(cause ?? "");
+  if (isLikelyOpaqueErrorMessage(msg)) {
+    return (
+      "We couldn’t finish generating your preview just now. " +
+      "Please wait a few seconds and try again. If it keeps happening, use a smaller photo (under 8 MB), JPG or PNG, and a stable connection."
+    );
+  }
+  const trimmed = msg.trim();
+  if (trimmed.length <= 400) return `We couldn’t finish generating your preview: ${trimmed}`;
+  return `We couldn’t finish generating your preview: ${trimmed.slice(0, 380)}…`;
+}
+
 export async function generateBathroomMockupAction(
   _prev: unknown,
   formData: FormData,
@@ -1970,6 +1992,7 @@ export async function generateBathroomMockupAction(
       estimateRefinementPending?: boolean;
     }
 > {
+  try {
   const startNewProject = str(formData, "start_new_project") === "1";
   const selectedStyleId = str(formData, "selected_style");
   const userDescription = String(formData.get("user_description") ?? "").trim().slice(0, 1600);
@@ -2022,7 +2045,16 @@ export async function generateBathroomMockupAction(
     contentType: normalizedUpload.contentType,
     upsert: false,
   });
-  if (uploadErr) return { error: uploadErr.message };
+  if (uploadErr) {
+    const um = uploadErr.message?.trim() ?? "";
+    if (isLikelyOpaqueErrorMessage(um)) {
+      return {
+        error:
+          "Could not upload your photo. Check your connection and try again, or pick a smaller JPG or PNG.",
+      };
+    }
+    return { error: um };
+  }
 
   const scopeDescription = `${style.scopeSeed}. ${
     userDescription || "Keep the same room layout and camera angle while upgrading finishes."
@@ -2260,6 +2292,10 @@ export async function generateBathroomMockupAction(
     activeMockupId: activeMockupRow.id,
     estimateRefinementPending: true,
   };
+  } catch (e) {
+    console.error("[try] generateBathroomMockupAction failed:", e);
+    return { error: friendlyTryGenerationFailureMessage(e) };
+  }
 }
 
 export async function regenerateBathroomMockupAction(

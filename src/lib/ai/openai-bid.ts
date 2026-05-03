@@ -724,7 +724,7 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
   const visionMaxTokens = homeownerTryFastVision
     ? hasAfterMockup
       ? 6000
-      : 2200
+      : 4096
     : hasAfterMockup
       ? 8192
       : 4096;
@@ -843,6 +843,8 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
       model: CHAT_MODEL,
       temperature: 0.15,
       max_tokens: visionMaxTokens,
+      /** Strongly reduces malformed / prose-wrapped outputs vs relying on prompt text alone. */
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "user",
@@ -858,12 +860,18 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
   }
 
   const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
   };
-  const raw = json.choices?.[0]?.message?.content?.trim() ?? "";
+  const choice0 = json.choices?.[0];
+  const raw = choice0?.message?.content?.trim() ?? "";
+  const finishReason = choice0?.finish_reason;
   const parsed = parseJsonObject(raw);
   if (!parsed) {
-    throw new Error("Could not parse AI response as JSON.");
+    const truncationHint =
+      finishReason === "length" ? " The vision reply may have been cut off (token limit); try again or simplify the photo. " : " ";
+    throw new Error(
+      `Could not parse AI response as JSON.${truncationHint}Snippet: ${raw.slice(0, 420)}`,
+    );
   }
 
   const summary = typeof parsed.summary === "string" ? parsed.summary : "";
@@ -917,6 +925,52 @@ export async function fetchMaterialsAndSummaryFromOpenAI(params: {
   return { materials, summary, roomAnalysis, remodelEditPrompt };
 }
 
+/** Strip ``` / ```json fences some models still emit despite response_format. */
+function stripModelJsonFencesForVision(raw: string): string {
+  let t = raw.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  }
+  return t;
+}
+
+/** First top-level `{ ... }` by brace depth, respecting JSON strings. */
+function extractBalancedJsonObjectString(s: string): string | null {
+  const start = s.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c === "\\") {
+        escape = true;
+        continue;
+      }
+      if (c === '"') {
+        inString = false;
+        continue;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 function parseJsonObject(text: string): Record<string, unknown> | null {
   const tryParse = (s: string) => {
     try {
@@ -926,13 +980,21 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
     }
   };
 
-  let direct = tryParse(text);
+  const normalized = stripModelJsonFencesForVision(text);
+
+  let direct = tryParse(normalized);
   if (direct) return direct;
 
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
+  const balanced = extractBalancedJsonObjectString(normalized);
+  if (balanced) {
+    direct = tryParse(balanced);
+    if (direct) return direct;
+  }
+
+  const start = normalized.indexOf("{");
+  const end = normalized.lastIndexOf("}");
   if (start >= 0 && end > start) {
-    direct = tryParse(text.slice(start, end + 1));
+    direct = tryParse(normalized.slice(start, end + 1));
     if (direct) return direct;
   }
   return null;
