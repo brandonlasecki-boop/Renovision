@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Check, Lock, ShieldCheck, Sparkles, Timer, Upload } from "lucide-react";
+import { Check, Sparkles, Upload } from "lucide-react";
 
 import { LandingHeroEasyStepsMobile } from "@/components/landing/landing-hero-easy-steps-mobile";
 import { LandingHeroTransformation } from "@/components/landing/landing-hero-transformation";
@@ -42,24 +42,12 @@ function HeroSocialProofMobile() {
   );
 }
 
-function HeroTrustIconsMobile() {
-  const items = [
-    { Icon: Lock, label: "No signup" },
-    { Icon: Timer, label: "2 minutes" },
-    { Icon: ShieldCheck, label: "No spam" },
-  ] as const;
+/** One line under the mobile hero CTA — keeps vertical space minimal. */
+function HeroTrustLineMobile() {
   return (
-    <div className="grid w-full max-w-md grid-cols-3 gap-1.5 px-0.5">
-      {items.map(({ Icon, label }) => (
-        <div
-          key={label}
-          className="flex min-h-0 flex-row items-center justify-center gap-1 rounded-lg border border-border/60 bg-card/90 px-1 py-1 shadow-sm"
-        >
-          <Icon className="size-3.5 shrink-0 text-renovision-teal" strokeWidth={2} aria-hidden />
-          <span className="text-left text-[10px] font-semibold leading-none text-muted-foreground">{label}</span>
-        </div>
-      ))}
-    </div>
+    <p className="w-full max-w-md px-1 text-center text-[11px] font-medium leading-tight tracking-tight text-muted-foreground">
+      No signup • 2 minutes • No spam
+    </p>
   );
 }
 
@@ -67,20 +55,20 @@ export function LandingHero() {
   return (
     <section
       id="preview"
-      className="relative scroll-mt-20 overflow-hidden border-b border-border/40 bg-gradient-to-b from-[#fbf8f3] via-[#f8f5ef] to-background px-3 pb-6 pt-2.5 max-md:pb-4 sm:px-6 sm:pb-12 sm:pt-6 md:px-6 md:pb-12 md:pt-6 lg:pb-16 lg:pt-12 lg:px-8"
+      className="relative scroll-mt-20 overflow-hidden border-b border-border/40 bg-gradient-to-b from-[#fbf8f3] via-[#f8f5ef] to-background px-3 pb-6 pt-2 max-md:pb-3 max-md:pt-1 sm:px-6 sm:pb-12 sm:pt-6 md:px-6 md:pb-12 md:pt-6 lg:pb-16 lg:pt-12 lg:px-8"
     >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(232,126,55,0.08),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-3 max-md:gap-2 sm:gap-6 md:gap-8 lg:gap-10">
+      <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-3 max-md:gap-1.5 sm:gap-6 md:gap-8 lg:gap-10">
         {/* Intro */}
         <div className="mx-auto w-full max-w-xl text-center max-md:order-1 sm:max-w-2xl md:order-1">
-          <p className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-renovision-teal/30 bg-white/90 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-renovision-navy shadow-sm backdrop-blur-sm sm:gap-2 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.12em] md:text-xs">
+          <p className="mx-auto inline-flex max-md:py-0.5 max-md:pl-2 max-md:pr-2.5 max-md:text-[8.5px] max-md:tracking-[0.08em] items-center gap-1.5 rounded-full border border-renovision-teal/30 bg-white/90 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-renovision-navy shadow-sm backdrop-blur-sm sm:gap-2 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.12em] md:text-xs">
             <Sparkles className="size-3 shrink-0 text-renovision-orange sm:size-3.5" aria-hidden />
             AI-powered bathroom visualizer
           </p>
-          <h1 className="mt-2 text-balance text-[1.35rem] font-semibold leading-[1.16] tracking-tight text-foreground max-md:mt-1.5 md:hidden">
+          <h1 className="mt-2 text-balance text-[1.35rem] font-semibold leading-[1.16] tracking-tight text-foreground max-md:mt-1 max-md:text-[1.28rem] max-md:leading-[1.12] md:hidden">
             See your bathroom{" "}
             <span className="text-renovision-orange">remodeled in seconds.</span>
           </h1>
@@ -93,7 +81,7 @@ export function LandingHero() {
           <p className="mx-auto mt-2 hidden max-w-prose text-pretty text-base leading-relaxed text-muted-foreground sm:mt-3 lg:block sm:text-lg">
             Upload a photo, see your remodel in seconds, and decide with confidence before starting your project.
           </p>
-          <p className="mx-auto mt-1.5 max-w-prose text-pretty text-[12px] leading-snug text-muted-foreground sm:mt-2 sm:text-sm lg:hidden">
+          <p className="mx-auto mt-1.5 max-w-prose text-pretty text-[12px] leading-snug text-muted-foreground max-md:hidden sm:mt-2 sm:text-sm lg:hidden">
             Upload a photo and see remodel ideas for your space—before you hire anyone.
           </p>
         </div>
@@ -134,18 +122,18 @@ export function LandingHero() {
           <LandingHeroTransformation />
         </div>
 
-        {/* Mobile-only: social proof → CTA → icon trust */}
-        <div className="mx-auto flex w-full max-w-md max-md:order-3 justify-center md:hidden">
-          <HeroSocialProofMobile />
-        </div>
-        <div className="mx-auto w-full max-w-xl max-md:order-4 md:hidden">
+        {/* Mobile: CTA directly under demo, then trust line, then social (conversion order) */}
+        <div className="mx-auto w-full max-w-xl max-md:order-3 md:hidden">
           <TryCtaLink placement="landing_hero_primary" href={TRY_FLOW_UPLOAD_HREF} className={heroCtaClassName}>
             <Upload className="size-4 shrink-0 opacity-95" aria-hidden />
             See My Bathroom Instantly
           </TryCtaLink>
         </div>
-        <div className="mx-auto w-full max-w-xl max-md:order-5 md:hidden">
-          <HeroTrustIconsMobile />
+        <div className="mx-auto flex w-full max-w-xl max-md:order-4 justify-center md:hidden">
+          <HeroTrustLineMobile />
+        </div>
+        <div className="mx-auto flex w-full max-w-md max-md:order-5 justify-center md:hidden">
+          <HeroSocialProofMobile />
         </div>
         <LandingHeroEasyStepsMobile />
       </div>
