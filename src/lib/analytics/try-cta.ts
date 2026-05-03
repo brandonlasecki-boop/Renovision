@@ -12,7 +12,8 @@ export type TryCtaPlacement =
   | "landing_faq"
   | "landing_how_it_works"
   | "landing_testimonials"
-  | "landing_real_transformations";
+  | "landing_real_transformations"
+  | "landing_mobile_menu";
 
 /** Fires a Google Ads `gtag` event before navigating to `/try`. */
 export function trackTryCtaClick(placement: TryCtaPlacement, href?: string): void {
