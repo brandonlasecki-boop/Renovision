@@ -664,14 +664,17 @@ export function HomeownerTryClient({
               ) : null}
               <BeforeAfterCompareSlider beforeUrl={beforeImageForCompare} afterUrl={afterImageForDisplay} />
               {!tryResultCustomizeOpen ? (
-                <div className="flex justify-center pt-1">
+                <div className="w-full space-y-3 pt-2">
+                  <p className="text-balance text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
+                    Want to tweak the design or lower the cost?
+                  </p>
                   <Button
                     type="button"
                     size="lg"
-                    className="h-12 min-w-[14rem] rounded-xl px-8 text-base font-semibold shadow-md"
+                    className="h-12 w-full rounded-xl text-base font-semibold shadow-lg sm:h-14 sm:text-lg"
                     onClick={() => setTryResultCustomizeOpen(true)}
                   >
-                    Explore options
+                    Customize This Design
                   </Button>
                 </div>
               ) : null}
