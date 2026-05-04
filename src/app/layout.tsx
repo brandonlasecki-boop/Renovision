@@ -33,7 +33,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+      >
+        <Suspense fallback={null}>
+          <AttributionTracker />
+        </Suspense>
+        {children}
+        <Toaster />
         <Script
           async
           src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
@@ -48,15 +55,6 @@ export default function RootLayout({
             gtag('config', '${GOOGLE_ADS_ID}');
           `}
         </Script>
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
-      >
-        <Suspense fallback={null}>
-          <AttributionTracker />
-        </Suspense>
-        {children}
-        <Toaster />
       </body>
     </html>
   );
