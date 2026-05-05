@@ -715,7 +715,7 @@ export function HomeownerTryClient({
             <p className="text-xs font-medium text-renovision-navy">{progressText}</p>
           ) : step === "upload" ? (
             <>
-              <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">Preview your bathroom remodel</h1>
+              <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">Let&apos;s transform your bathroom</h1>
               <p className="text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
                 Upload a photo to see your bathroom transformed in seconds.
               </p>
@@ -794,7 +794,7 @@ export function HomeownerTryClient({
                     lib.files = dt.files;
                   } catch {
                     toast.error("Could not attach the photo from your camera.", {
-                      description: "Try “Choose from library” with a photo you already took.",
+                      description: "Try “Use existing photo” with a photo you already took.",
                     });
                     e.currentTarget.value = "";
                     return;
@@ -826,9 +826,10 @@ export function HomeownerTryClient({
                   handleBathroomPhotoFileChosen(file, "library");
                 }}
               />
-              <p className="text-center text-xs text-muted-foreground sm:text-sm">
-                Use your camera for a new shot, or pick a photo you already have.
+              <p className="text-center text-xs font-semibold text-renovision-navy sm:text-sm">
+                Get your remodel preview in under 60 seconds
               </p>
+              <p className="text-center text-xs text-muted-foreground sm:text-sm">Start by taking a photo</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Button
                   type="button"
@@ -837,19 +838,22 @@ export function HomeownerTryClient({
                   onClick={() => bathroomPhotoCameraInputRef.current?.click()}
                 >
                   <Camera className="size-5 shrink-0 sm:size-6" aria-hidden />
-                  Take a photo
+                  Take a Photo of Your Bathroom
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-14 w-full justify-center gap-2.5 rounded-2xl border-2 border-renovision-navy/40 bg-background text-base font-semibold text-renovision-navy shadow-sm hover:bg-renovision-navy-muted/30 disabled:opacity-60 sm:h-16 sm:text-lg"
+                  className="h-12 w-full justify-center gap-2 rounded-2xl border border-border/80 bg-background text-sm font-medium text-muted-foreground shadow-none hover:bg-muted/40 hover:text-foreground disabled:opacity-60 sm:h-14 sm:text-base"
                   disabled={generatePending}
                   onClick={() => bathroomPhotoLibraryInputRef.current?.click()}
                 >
-                  <Upload className="size-5 shrink-0 sm:size-6" aria-hidden />
-                  Choose from library
+                  <Upload className="size-4 shrink-0 sm:size-5" aria-hidden />
+                  Use existing photo
                 </Button>
               </div>
+              <p className="text-center text-[11px] text-muted-foreground sm:text-xs">
+                Works best with a full view of your bathroom
+              </p>
               {firstUploadPreviewUrl ? (
                 <div className="relative mx-auto aspect-[4/3] w-full max-w-sm overflow-hidden rounded-xl border border-border bg-muted">
                   <Image

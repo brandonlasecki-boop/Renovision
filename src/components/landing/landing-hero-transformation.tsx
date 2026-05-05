@@ -210,7 +210,7 @@ export function LandingHeroTransformation() {
 
   const cardChromeTitle =
     phase === "interactive"
-      ? "Compare styles on this bathroom"
+      ? "Drag to see the transformation"
       : "Real bathroom · Spa style";
 
   const interactivePills = (

@@ -36,7 +36,7 @@ function HeroSocialProofMobile() {
         ))}
       </div>
       <p className="text-center text-[13px] leading-snug text-muted-foreground">
-        Join <span className="font-semibold text-renovision-orange">1000s</span> of homeowners who are already transforming their bathrooms.
+        Join <span className="font-semibold text-renovision-orange">1,000+</span> homeowners remodeling smarter
       </p>
     </div>
   );
@@ -46,7 +46,7 @@ function HeroSocialProofMobile() {
 function HeroTrustLineMobile() {
   return (
     <p className="w-full max-w-md px-1 text-center text-[11px] font-medium leading-tight tracking-tight text-muted-foreground">
-      No signup • 2 minutes • No spam
+      Most people see results in under 60 seconds • No signup
     </p>
   );
 }
@@ -122,18 +122,21 @@ export function LandingHero() {
           <LandingHeroTransformation />
         </div>
 
-        {/* Mobile: CTA directly under demo, then trust line, then social (conversion order) */}
-        <div className="mx-auto w-full max-w-xl max-md:order-3 md:hidden">
+        {/* Mobile: social proof + value line + CTA, then trust line */}
+        <div className="mx-auto flex w-full max-w-md max-md:order-3 justify-center md:hidden">
+          <HeroSocialProofMobile />
+        </div>
+        <p className="mx-auto w-full max-w-md px-1 text-center text-[13px] font-semibold leading-snug text-renovision-navy md:hidden max-md:order-4">
+          Upload a photo → get 5 remodel ideas instantly
+        </p>
+        <div className="mx-auto w-full max-w-xl max-md:order-5 md:hidden">
           <TryCtaLink placement="landing_hero_primary" href={TRY_FLOW_UPLOAD_HREF} className={heroCtaClassName}>
             <Upload className="size-4 shrink-0 opacity-95" aria-hidden />
-            See My Bathroom Instantly
+            See MY Bathroom Transformed
           </TryCtaLink>
         </div>
-        <div className="mx-auto flex w-full max-w-xl max-md:order-4 justify-center md:hidden">
+        <div className="mx-auto flex w-full max-w-xl max-md:order-6 justify-center md:hidden">
           <HeroTrustLineMobile />
-        </div>
-        <div className="mx-auto flex w-full max-w-md max-md:order-5 justify-center md:hidden">
-          <HeroSocialProofMobile />
         </div>
         <LandingHeroEasyStepsMobile />
       </div>
