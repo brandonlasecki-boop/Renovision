@@ -7,12 +7,14 @@ import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingHowItWorks } from "@/components/landing/landing-how-it-works";
 import { LandingRealTransformationsSection } from "@/components/landing/landing-real-transformations-section";
 import { LandingMobileTryBar } from "@/components/landing/landing-mobile-try-bar";
+import { GetStartedHashRedirect } from "@/components/landing/get-started-hash-redirect";
 import { LandingTestimonials } from "@/components/landing/landing-testimonials";
 import { LandingWhy } from "@/components/landing/landing-why";
 
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-background">
+      <GetStartedHashRedirect />
       <LandingHeader />
       <main className="pb-[5.25rem] md:pb-0">
         <LandingHero />
