@@ -5,8 +5,8 @@ import type { ComponentProps, PropsWithChildren } from "react";
 
 import { trackTryCtaClick, type TryCtaPlacement } from "@/lib/analytics/try-cta";
 
-/** Primary CTAs: open the live try flow (style → upload), not a restored previous result. */
-export const TRY_FLOW_UPLOAD_HREF = "/try?new=1";
+/** Primary CTAs: dedicated upload entry (fresh flow; no auto-restore of last generation). */
+export const TRY_FLOW_UPLOAD_HREF = "/upload";
 
 type BaseLinkProps = ComponentProps<typeof Link>;
 

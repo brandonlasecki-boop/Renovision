@@ -830,7 +830,7 @@ export function HomeownerTryClient({
                 Get your remodel preview in under 60 seconds
               </p>
               <p className="text-center text-xs text-muted-foreground sm:text-sm">Start by taking a photo</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3">
                 <Button
                   type="button"
                   className="h-14 w-full justify-center gap-2.5 rounded-2xl bg-renovision-navy text-base font-semibold text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 disabled:opacity-60 sm:h-16 sm:text-lg"

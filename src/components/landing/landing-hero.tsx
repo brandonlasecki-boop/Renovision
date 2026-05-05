@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Check, Sparkles, Upload } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
 
 import { LandingHeroEasyStepsMobile } from "@/components/landing/landing-hero-easy-steps-mobile";
 import { LandingHeroTransformation } from "@/components/landing/landing-hero-transformation";
@@ -15,10 +15,10 @@ const SOCIAL_PROOF_AVATARS = [
 
 const heroCtaClassName = cn(
   buttonVariants({ size: "lg" }),
-  "flex h-12 min-h-12 w-full max-w-full items-center justify-center gap-2 bg-renovision-navy px-4 text-[0.9375rem] font-semibold leading-tight text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 sm:h-[52px] sm:min-h-[52px] sm:px-6 sm:text-base md:px-6 lg:h-12 lg:min-h-12 lg:w-auto lg:px-8 lg:shadow-none",
+  "flex h-12 min-h-12 w-full max-w-full items-center justify-center gap-2 bg-renovision-navy px-4 text-[0.9375rem] font-semibold leading-tight text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 sm:h-[52px] sm:min-h-[52px] sm:px-6 sm:text-base md:px-6 lg:h-[52px] lg:min-h-[52px]",
 );
 
-function HeroSocialProofMobile() {
+function HeroSocialProof() {
   return (
     <div className="flex w-full max-w-md flex-col items-center gap-1.5 px-1">
       <div
@@ -42,8 +42,8 @@ function HeroSocialProofMobile() {
   );
 }
 
-/** One line under the mobile hero CTA — keeps vertical space minimal. */
-function HeroTrustLineMobile() {
+/** One line under the hero CTA — urgency + trust. */
+function HeroTrustLine() {
   return (
     <p className="w-full max-w-md px-1 text-center text-[11px] font-medium leading-tight tracking-tight text-muted-foreground">
       Most people see results in under 60 seconds • No signup
@@ -61,82 +61,39 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(232,126,55,0.08),transparent)]"
         aria-hidden
       />
-      <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-3 max-md:gap-1.5 sm:gap-6 md:gap-8 lg:gap-10">
-        {/* Intro */}
-        <div className="mx-auto w-full max-w-xl text-center max-md:order-1 sm:max-w-2xl md:order-1">
+      <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-3 max-md:gap-1.5 sm:gap-5 md:gap-6 lg:gap-8">
+        {/* Intro — same headline story on all breakpoints */}
+        <div className="order-1 mx-auto w-full max-w-xl text-center sm:max-w-2xl">
           <p className="mx-auto inline-flex max-md:py-0.5 max-md:pl-2 max-md:pr-2.5 max-md:text-[8.5px] max-md:tracking-[0.08em] items-center gap-1.5 rounded-full border border-renovision-teal/30 bg-white/90 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-renovision-navy shadow-sm backdrop-blur-sm sm:gap-2 sm:px-3 sm:py-1.5 sm:text-[10px] sm:tracking-[0.12em] md:text-xs">
             <Sparkles className="size-3 shrink-0 text-renovision-orange sm:size-3.5" aria-hidden />
             AI-powered bathroom visualizer
           </p>
-          <h1 className="mt-2 text-balance text-[1.35rem] font-semibold leading-[1.16] tracking-tight text-foreground max-md:mt-1 max-md:text-[1.28rem] max-md:leading-[1.12] md:hidden">
+          <h1 className="mx-auto mt-2 max-w-[22rem] text-balance text-[1.28rem] font-semibold leading-[1.12] tracking-tight text-foreground max-md:mt-1 sm:mt-2 sm:max-w-none sm:text-2xl sm:leading-[1.14] md:mt-2.5 md:text-3xl md:leading-[1.1] lg:text-[2.35rem] lg:leading-[1.08]">
             See your bathroom{" "}
             <span className="text-renovision-orange">remodeled in seconds.</span>
           </h1>
-          <h1 className="mt-2 hidden text-balance text-3xl font-semibold leading-[1.12] tracking-tight text-foreground sm:mt-2.5 sm:text-4xl md:block md:leading-[1.08] lg:text-[2.75rem]">
-            See Your Bathroom Remodeled Before You Hire a Contractor
-          </h1>
-          <p className="mx-auto mt-2 hidden max-w-prose text-pretty text-sm font-semibold leading-snug text-renovision-navy sm:mt-3 sm:text-base md:block">
-            Includes a realistic preview + instant cost estimate so you can plan with confidence.
-          </p>
-          <p className="mx-auto mt-2 hidden max-w-prose text-pretty text-base leading-relaxed text-muted-foreground sm:mt-3 lg:block sm:text-lg">
-            Upload a photo, see your remodel in seconds, and decide with confidence before starting your project.
-          </p>
-          <p className="mx-auto mt-1.5 max-w-prose text-pretty text-[12px] leading-snug text-muted-foreground max-md:hidden sm:mt-2 sm:text-sm lg:hidden">
-            Upload a photo and see remodel ideas for your space—before you hire anyone.
-          </p>
         </div>
 
-        {/* Desktop: CTA + trust line + checklist (single column, before demo) */}
-        <div className="mx-auto hidden w-full max-w-xl flex-col space-y-2.5 md:flex md:order-2 md:space-y-3 lg:max-w-xl lg:space-y-4">
-          <div className="flex w-full justify-center">
-            <TryCtaLink
-              placement="landing_hero_primary"
-              href={TRY_FLOW_UPLOAD_HREF}
-              className={heroCtaClassName}
-            >
-              <Upload className="size-4 shrink-0 opacity-95 sm:size-[1.125rem]" aria-hidden />
-              See My Bathroom Instantly
-            </TryCtaLink>
-          </div>
-          <p className="text-center text-[13px] font-medium leading-snug text-muted-foreground sm:text-sm">
-            No signup • Takes 2 min • No spam
-          </p>
-          <ul className="w-full space-y-2.5 rounded-xl border border-renovision-teal/25 bg-card/95 p-3 text-left shadow-sm ring-1 ring-renovision-teal/15 sm:space-y-3 sm:p-5">
-            {(
-              [
-                "No signup required",
-                "Takes under 2 minutes",
-                "No contractor contact unless you choose",
-              ] as const
-            ).map((line) => (
-              <li key={line} className="flex gap-2.5 text-sm font-semibold leading-snug text-foreground sm:gap-3">
-                <Check className="mt-0.5 size-5 shrink-0 text-renovision-teal" strokeWidth={2.25} aria-hidden />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Demo (unchanged component) */}
-        <div className="w-full max-w-2xl max-md:order-2 md:order-3 md:max-w-none">
+        {/* Demo */}
+        <div className="order-2 w-full max-w-2xl md:max-w-none">
           <LandingHeroTransformation />
         </div>
 
-        {/* Mobile: social proof + value line + CTA, then trust line */}
-        <div className="mx-auto flex w-full max-w-md max-md:order-3 justify-center md:hidden">
-          <HeroSocialProofMobile />
+        {/* Social proof + value line + CTA + trust — same order as mobile */}
+        <div className="order-3 mx-auto flex w-full max-w-md justify-center">
+          <HeroSocialProof />
         </div>
-        <p className="mx-auto w-full max-w-md px-1 text-center text-[13px] font-semibold leading-snug text-renovision-navy md:hidden max-md:order-4">
+        <p className="order-4 mx-auto w-full max-w-md px-1 text-center text-[13px] font-semibold leading-snug text-renovision-navy sm:text-sm">
           Upload a photo → get 5 remodel ideas instantly
         </p>
-        <div className="mx-auto w-full max-w-xl max-md:order-5 md:hidden">
+        <div className="order-5 mx-auto w-full max-w-xl">
           <TryCtaLink placement="landing_hero_primary" href={TRY_FLOW_UPLOAD_HREF} className={heroCtaClassName}>
-            <Upload className="size-4 shrink-0 opacity-95" aria-hidden />
+            <Upload className="size-4 shrink-0 opacity-95 sm:size-[1.125rem]" aria-hidden />
             See MY Bathroom Transformed
           </TryCtaLink>
         </div>
-        <div className="mx-auto flex w-full max-w-xl max-md:order-6 justify-center md:hidden">
-          <HeroTrustLineMobile />
+        <div className="order-6 mx-auto flex w-full max-w-xl justify-center">
+          <HeroTrustLine />
         </div>
         <LandingHeroEasyStepsMobile />
       </div>

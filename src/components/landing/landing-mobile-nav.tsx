@@ -81,7 +81,7 @@ export function LandingMobileNav({
         </TryCtaLink>
 
         <p className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">On this page</p>
-        <a href="#how-it-works" className={inPageLinkClass} onClick={close}>
+        <a href="#hero-easy-steps" className={inPageLinkClass} onClick={close}>
           How it works
         </a>
         <a href="#why-renovision" className={inPageLinkClass} onClick={close}>

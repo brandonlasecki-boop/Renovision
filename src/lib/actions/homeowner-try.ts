@@ -2233,6 +2233,7 @@ export async function generateBathroomMockupAction(
         })
         .eq("id", generationId);
       revalidatePath("/try");
+      revalidatePath("/upload");
       revalidatePath("/projects");
     } catch (e) {
       console.error("[try] deferred homeowner estimate failed:", e);
@@ -2271,6 +2272,7 @@ export async function generateBathroomMockupAction(
   }
 
   revalidatePath("/try");
+  revalidatePath("/upload");
   revalidatePath("/projects");
   return {
     success: true,
@@ -2661,6 +2663,7 @@ export async function regenerateBathroomMockupAction(
   }
 
   revalidatePath("/try");
+  revalidatePath("/upload");
   revalidatePath("/projects");
   return {
     success: true,
@@ -2769,6 +2772,7 @@ export async function selectTryMockupVersionAction(
 
   const mockupVersions = await loadSignedMockupVersionsForProject(projectId, 60 * 60);
   revalidatePath("/try");
+  revalidatePath("/upload");
   revalidatePath("/projects");
   return {
     success: true,
@@ -3169,6 +3173,7 @@ export async function submitBathroomLeadAction(
   });
 
   revalidatePath("/try");
+  revalidatePath("/upload");
   revalidatePath("/projects");
   return { success: true };
 }

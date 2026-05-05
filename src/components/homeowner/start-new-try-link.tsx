@@ -9,7 +9,7 @@ export function StartNewTryLink() {
       type="button"
       className="font-medium text-renovision-navy underline-offset-4 hover:underline"
       onClick={() => {
-        router.push(`/try?new=1&r=${Date.now()}`);
+        router.push(`/upload?r=${Date.now()}`);
       }}
     >
       Start New

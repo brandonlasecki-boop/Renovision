@@ -10,7 +10,8 @@ export default async function SignupPage({
   const nextPath =
     sp.next?.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/projects";
   /** Preserve restore params when user opened signup from /try with a generation in progress. */
-  const backToPreviewHref = nextPath.startsWith("/try") ? nextPath : "/try";
+  const backToPreviewHref =
+    nextPath.startsWith("/try") || nextPath.startsWith("/upload") ? nextPath : "/upload";
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">

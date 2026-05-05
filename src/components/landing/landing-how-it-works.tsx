@@ -29,7 +29,7 @@ const steps = [
 export function LandingHowItWorks() {
   return (
     <section
-      id="how-it-works"
+      id="how-it-works-detail"
       className="relative scroll-mt-24 overflow-hidden border-b border-border/40 bg-background px-4 py-14 sm:px-6 sm:py-24 lg:px-8 lg:py-28"
     >
       <div

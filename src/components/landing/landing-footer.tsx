@@ -19,7 +19,7 @@ export function LandingFooter() {
         >
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm md:hidden">
             <a
-              href="#how-it-works"
+              href="#hero-easy-steps"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
               How it works

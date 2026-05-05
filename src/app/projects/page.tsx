@@ -31,7 +31,7 @@ export default async function MyProjectsPage() {
             <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
               Renovision
             </Link>
-            <Link href="/try?new=1" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+            <Link href="/upload" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
               Start new design
             </Link>
           </div>
@@ -51,7 +51,7 @@ export default async function MyProjectsPage() {
           <Link href="/" className="text-sm font-semibold tracking-tight text-renovision-navy">
             Renovision
           </Link>
-          <Link href="/try?new=1" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+          <Link href="/upload" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
             Start new design
           </Link>
         </div>
@@ -72,7 +72,7 @@ export default async function MyProjectsPage() {
             {user ? (
               <p>
                 No projects yet. Complete a bathroom preview on{" "}
-                <Link href="/try" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                <Link href="/upload" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
                   Try your remodel
                 </Link>
                 — it will appear here. Use <span className="font-medium text-foreground">Save My Project</span> on
@@ -81,7 +81,7 @@ export default async function MyProjectsPage() {
             ) : (
               <p>
                 No projects on this device yet.{" "}
-                <Link href="/try" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
+                <Link href="/upload" className="font-medium text-renovision-navy underline-offset-4 hover:underline">
                   Start a free preview
                 </Link>{" "}
                 — it will show up here automatically.

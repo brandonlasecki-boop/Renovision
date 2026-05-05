@@ -29,7 +29,7 @@ export function AttributionTracker() {
       }
     }
 
-    if (window.location.pathname === "/try") {
+    if (window.location.pathname === "/try" || window.location.pathname === "/upload") {
       const day = new Date().toISOString().slice(0, 10);
       const visitKey = `${TRY_VISIT_SYNC_PREFIX}:${day}`;
       if (!window.localStorage.getItem(visitKey)) {

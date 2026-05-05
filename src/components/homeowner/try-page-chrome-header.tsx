@@ -40,7 +40,7 @@ export function TryPageChromeHeader({ user, showAdminNav, anonymousSessionId, us
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">
-            <a href="/#how-it-works" className={navLinkClass}>
+            <a href="/#hero-easy-steps" className={navLinkClass}>
               How It Works
             </a>
             <a href="/#why-renovision" className={navLinkClass}>

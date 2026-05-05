@@ -25,4 +25,5 @@ export async function renameSavedProjectAction(
 
   revalidatePath("/projects");
   revalidatePath("/try");
+  revalidatePath("/upload");
 }

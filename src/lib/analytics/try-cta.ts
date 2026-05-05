@@ -15,7 +15,7 @@ export type TryCtaPlacement =
   | "landing_real_transformations"
   | "landing_mobile_menu";
 
-/** Fires a Google Ads `gtag` event before navigating to `/try`. */
+/** Fires a Google Ads `gtag` event before navigating to the try/upload flow. */
 export function trackTryCtaClick(placement: TryCtaPlacement, href?: string): void {
   trackEvent("try_cta_click", {
     placement,

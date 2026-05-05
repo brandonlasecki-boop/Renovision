@@ -20,6 +20,6 @@ export default async function SavedProjectDetailPage({
   const tryHref =
     project.generationId && project.projectId
       ? `/try?restore_generation_id=${encodeURIComponent(project.generationId)}&restore_project_id=${encodeURIComponent(project.projectId)}`
-      : "/try?new=1";
+      : "/upload";
   redirect(tryHref);
 }

@@ -21,10 +21,13 @@ const STEPS = [
   },
 ] as const;
 
-/** Mobile-only: compact strip under trust row so first viewport can end here. */
+/** Compact 1-2-3 strip under the hero trust line (same on mobile and desktop). */
 export function LandingHeroEasyStepsMobile() {
   return (
-    <div className="mt-0.5 w-full max-w-md max-md:order-6 md:hidden">
+    <div
+      id="hero-easy-steps"
+      className="order-7 mx-auto mt-0.5 w-full max-w-md scroll-mt-24 md:max-w-lg"
+    >
       <div className="rounded-xl border border-border/50 bg-gradient-to-b from-muted/50 to-muted/25 px-2.5 py-2.5 shadow-sm ring-1 ring-black/[0.04]">
         <h2 className="text-center text-sm font-semibold leading-tight tracking-tight text-foreground">
           It&apos;s as easy as <span className="text-renovision-orange">1-2-3</span>

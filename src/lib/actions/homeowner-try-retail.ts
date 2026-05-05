@@ -316,5 +316,6 @@ export async function applyTryRetailShelfCandidateChoiceAction(
 
   await updateHomeownerTryProjectAi(pid, { material_estimate: next });
   revalidatePath("/try");
+  revalidatePath("/upload");
   return { success: true as const };
 }
