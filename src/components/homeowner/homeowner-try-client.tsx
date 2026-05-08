@@ -497,9 +497,9 @@ export function HomeownerTryClient({
       if (leadSubmitted) return;
       setLeadSubmitted(true);
       if ("leadId" in leadState && typeof leadState.leadId === "string") {
-        toast.success("Lead saved", {
-          description: `Supabase → Table Editor → public.leads → filter id = ${leadState.leadId}`,
-          duration: 16_000,
+        toast.success("Request received", {
+          description: "Thanks! We got your details and will connect you with remodelers.",
+          duration: 10_000,
         });
       }
       void trackAnalyticsEvent("lead_submitted", pendingLeadMetaRef.current ?? {});
@@ -1059,22 +1059,20 @@ export function HomeownerTryClient({
                   </div>
                 )}
               </div>
-              {!tryResultCustomizeOpen ? (
-                <div className="w-full space-y-3 pt-2">
-                  <p className="text-balance text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
-                    Want to tweak the design or lower the cost?
-                  </p>
-                  <Button
-                    type="button"
-                    data-analytics-id="customize-design-cta"
-                    size="lg"
-                    className="h-12 w-full rounded-xl text-base font-semibold shadow-lg sm:h-14 sm:text-lg"
-                    onClick={() => setTryResultCustomizeOpen(true)}
-                  >
-                    Customize This Design
-                  </Button>
-                </div>
-              ) : null}
+              <div className="w-full space-y-3 pt-2">
+                <p className="text-balance text-center text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  Want to tweak the design or lower the cost?
+                </p>
+                <Button
+                  type="button"
+                  data-analytics-id="customize-design-cta"
+                  size="lg"
+                  className="h-12 w-full rounded-xl text-base font-semibold shadow-lg sm:h-14 sm:text-lg"
+                  onClick={() => setTryResultCustomizeOpen((prev) => !prev)}
+                >
+                  {tryResultCustomizeOpen ? "Collapse Customization" : "Customize This Design"}
+                </Button>
+              </div>
             </div>
             {tryResultCustomizeOpen ? (
             <>
@@ -1430,6 +1428,8 @@ export function HomeownerTryClient({
                 </div>
               </details>
             </div>
+            </>
+            ) : null}
 
             <div className="rounded-2xl border border-renovision-navy/20 bg-gradient-to-b from-background to-renovision-navy-muted/25 p-4 shadow-lg sm:p-5">
               <p className="text-lg font-semibold">Like this direction? Pick what to do next.</p>
@@ -1505,8 +1505,6 @@ export function HomeownerTryClient({
                 <p className="text-xs text-muted-foreground">No contractor contact unless you request it.</p>
               </div>
             </div>
-            </>
-            ) : null}
           </section>
         ) : null}
 
@@ -1665,12 +1663,9 @@ export function HomeownerTryClient({
                   <p className="text-sm font-medium text-renovision-teal">
                     Thanks. Your details were submitted and we&apos;ll connect you with remodelers.
                   </p>
-                  {leadState && "success" in leadState && leadState.success && "leadId" in leadState ? (
-                    <p className="break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
-                      Saved to Supabase table <span className="text-foreground">public.leads</span> — id{" "}
-                      <span className="select-all text-foreground">{leadState.leadId}</span>
-                    </p>
-                  ) : null}
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    A local remodeler will review your request and follow up with next steps.
+                  </p>
                   <Button type="button" variant="outline" className="rounded-xl" onClick={() => setLeadOpen(false)}>
                     Done
                   </Button>
