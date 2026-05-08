@@ -100,7 +100,10 @@ export function getEligibleContractorsForLead(
   lead: { zip_code?: string | null } | { zipCode?: string | null },
   contractors: LeadContractorOption[],
 ) {
-  const zip = "zip_code" in lead ? asText(lead.zip_code) : asText(lead.zipCode);
+  const zip = asText(
+    (lead as { zip_code?: string | null }).zip_code ??
+      (lead as { zipCode?: string | null }).zipCode,
+  );
   const zipNorm = zip.toLowerCase();
   const activeContractors = contractors.filter((c) => c.active);
   const eligible = activeContractors.filter((c) =>

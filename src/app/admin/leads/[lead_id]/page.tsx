@@ -19,6 +19,10 @@ export const metadata = {
 };
 
 type LeadStatus = "new" | "reviewed" | "contacted" | "assigned" | "shared" | "closed" | "bad_fit";
+type ShareState =
+  | { ok: false; message: string }
+  | { ok: true; message: string; summary: string; contractorName: string; sharedAtIso: string }
+  | null;
 
 function safeJson(value: unknown): string {
   try {
@@ -74,9 +78,9 @@ async function addInternalNoteAction(formData: FormData) {
 }
 
 async function assignShareLeadAction(
-  _prev: { ok: false; message: string } | { ok: true; message: string; summary: string; contractorName: string; sharedAtIso: string } | null,
+  _prev: ShareState,
   formData: FormData,
-) {
+): Promise<ShareState> {
   "use server";
   const user = await requireAdminUser();
   const leadId = String(formData.get("lead_id") ?? "").trim();

@@ -15,16 +15,23 @@ type Props = PropsWithChildren<
   Omit<BaseLinkProps, "onClick"> & {
     placement: TryCtaPlacement;
     onClick?: BaseLinkProps["onClick"];
+    "data-analytics-id"?: string;
   }
 >;
 
-export function TryCtaLink({ placement, href, onClick, ...rest }: Props) {
+export function TryCtaLink({
+  placement,
+  href,
+  onClick,
+  "data-analytics-id": analyticsId,
+  ...rest
+}: Props) {
   const hrefStr = typeof href === "string" ? href : undefined;
   return (
     <Link
       {...rest}
       href={href}
-      data-analytics-id={rest["data-analytics-id"] ?? "upload-cta"}
+      data-analytics-id={analyticsId ?? "upload-cta"}
       onClick={(e) => {
         trackTryCtaClick(placement, hrefStr);
         if (placement === "landing_hero_primary") {
