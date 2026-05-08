@@ -1957,6 +1957,52 @@ function friendlyTryGenerationFailureMessage(cause: unknown): string {
   return `We couldn’t finish generating your preview: ${trimmed.slice(0, 380)}…`;
 }
 
+function safeGenerationErrorMetadata(cause: unknown): { error_code: string; message_preview: string } {
+  const raw = cause instanceof Error ? cause.message : String(cause ?? "");
+  const msg = raw.trim().toLowerCase();
+  let errorCode = "generation_failed";
+  if (!raw.trim()) errorCode = "unknown";
+  else if (msg.includes("timeout") || msg.includes("timed out")) errorCode = "timeout";
+  else if (msg.includes("rate limit") || msg.includes("429")) errorCode = "rate_limited";
+  else if (msg.includes("storage") || msg.includes("upload")) errorCode = "storage_error";
+  else if (msg.includes("vertex")) errorCode = "vertex_error";
+  else if (msg.includes("openai")) errorCode = "openai_error";
+  const preview = raw.replace(/\s+/g, " ").slice(0, 180);
+  return {
+    error_code: errorCode,
+    message_preview: preview,
+  };
+}
+
+function scopeOfWorkFromEstimate(est: {
+  detailedBreakdown: unknown;
+  reasoning: unknown;
+  assumptions: unknown;
+  breakdown: unknown;
+}) {
+  return {
+    detailed_breakdown: est.detailedBreakdown,
+    reasoning: est.reasoning,
+    assumptions: est.assumptions,
+    estimate_breakdown: est.breakdown,
+  };
+}
+
+function tweaksUsedForRegeneration(params: {
+  saveHintSelections: string[];
+  designHintSelections: string[];
+  legacyHint: string;
+  customTweakRaw: string;
+}) {
+  const now = new Date().toISOString();
+  const rows: Array<{ type: string; text: string; timestamp: string }> = [];
+  for (const text of params.saveHintSelections) rows.push({ type: "save_money", text, timestamp: now });
+  for (const text of params.designHintSelections) rows.push({ type: "improve_design", text, timestamp: now });
+  if (params.legacyHint) rows.push({ type: "legacy_hint", text: params.legacyHint, timestamp: now });
+  if (params.customTweakRaw) rows.push({ type: "custom_tweak", text: params.customTweakRaw, timestamp: now });
+  return rows;
+}
+
 export async function generateBathroomMockupAction(
   _prev: unknown,
   formData: FormData,
@@ -2110,6 +2156,7 @@ export async function generateBathroomMockupAction(
   const { prompt: initialTryPrompt, wetZoneRemodelIntent: initialWetZoneIntent } =
     buildInitialTryGenerationPrompt(style.id, userDescription);
 
+  const generationId = randomUUID();
   const result = await runHomeownerTryMockupGeneration({
     projectId,
     selectedStyle: style.id,
@@ -2121,12 +2168,38 @@ export async function generateBathroomMockupAction(
   });
 
   if (!result.ok) {
+    const safeError = safeGenerationErrorMetadata(result.message);
+    await svc.from("bathroom_generations").upsert(
+      {
+        id: generationId,
+        session_id: viewer.anonymousSessionId,
+        user_id: viewer.userId,
+        project_id: projectId,
+        selected_style: style.name,
+        user_description: userDescription || null,
+        uploaded_image_url: beforePath,
+        generated_image_url: null,
+        tweaks_used: [],
+        estimate_min: null,
+        estimate_max: null,
+        estimate_low: null,
+        estimate_expected: null,
+        estimate_high: null,
+        scope_of_work: null,
+        contractor_notes: null,
+        lead_submitted: false,
+        status: "failed",
+        metadata: { generation_error: safeError },
+        attribution: incomingAttribution,
+      },
+      { onConflict: "id" },
+    );
     await trackTryEvent({
       eventType: "generation_failed",
       userId: viewer.userId,
       anonymousSessionId: viewer.anonymousSessionId,
       projectId,
-      metadata: { selected_style: style.id, message: result.message.slice(0, 300) },
+      metadata: { selected_style: style.id, generation_id: generationId, error_code: safeError.error_code },
     });
     return { error: result.message };
   }
@@ -2183,7 +2256,6 @@ export async function generateBathroomMockupAction(
   const uploadedSignedUrl = uploadedSigned.data.signedUrl;
   const generatedSignedUrl = generatedSigned.data.signedUrl;
 
-  const generationId = randomUUID();
   const { error: genInsertError } = await svc.from("bathroom_generations").insert({
     id: generationId,
     session_id: viewer.anonymousSessionId,
@@ -2193,12 +2265,20 @@ export async function generateBathroomMockupAction(
     user_description: userDescription || null,
     uploaded_image_url: beforePath,
     generated_image_url: latest.storage_path,
+    tweaks_used: [],
+    estimate_low: styleDefaults.estimateRange.min,
+    estimate_expected: Math.round((styleDefaults.estimateRange.min + styleDefaults.estimateRange.max) / 2),
+    estimate_high: styleDefaults.estimateRange.max,
     estimate_min: styleDefaults.estimateRange.min,
     estimate_max: styleDefaults.estimateRange.max,
+    scope_of_work: null,
+    contractor_notes: null,
     try_estimate_snapshot: null,
     refinements_used: 0,
     selected_variation: null,
     lead_submitted: false,
+    status: "completed",
+    metadata: {},
     attribution: incomingAttribution,
   });
   if (genInsertError) {
@@ -2227,8 +2307,13 @@ export async function generateBathroomMockupAction(
       await svcInner
         .from("bathroom_generations")
         .update({
+          status: "completed",
+          estimate_low: est.estimateRange.min,
+          estimate_expected: Math.round((est.estimateRange.min + est.estimateRange.max) / 2),
+          estimate_high: est.estimateRange.max,
           estimate_min: est.estimateRange.min,
           estimate_max: est.estimateRange.max,
+          scope_of_work: scopeOfWorkFromEstimate(est),
           try_estimate_snapshot: tryEstimateSnapshotFromBreakdown(est),
         })
         .eq("id", generationId);
@@ -2504,12 +2589,29 @@ export async function regenerateBathroomMockupAction(
     forceOpenAiComparison,
   });
   if (!run.ok) {
+    const safeError = safeGenerationErrorMetadata(run.message);
+    const { data: existingGeneration } = await svc.from("bathroom_generations").select("metadata").eq("id", generationId).maybeSingle();
+    const existingMetadata =
+      existingGeneration && typeof (existingGeneration as { metadata?: unknown }).metadata === "object"
+        ? ((existingGeneration as { metadata?: Record<string, unknown> }).metadata ?? {})
+        : {};
+    await svc
+      .from("bathroom_generations")
+      .update({
+        status: "failed",
+        metadata: {
+          ...existingMetadata,
+          generation_error: safeError,
+          last_failed_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", generationId);
     await trackTryEvent({
       eventType: "generation_failed",
       userId: viewer.userId,
       anonymousSessionId: viewer.anonymousSessionId,
       projectId,
-      metadata: { mode: "regenerate", message: run.message.slice(0, 300) },
+      metadata: { mode: "regenerate", generation_id: generationId, error_code: safeError.error_code },
     });
     return { error: run.message };
   }
@@ -2632,15 +2734,38 @@ export async function regenerateBathroomMockupAction(
     incomingAttribution,
   );
 
-  await svc
-    .from("bathroom_generations")
-    .update({
+  const tweakRows = tweaksUsedForRegeneration({
+    saveHintSelections,
+    designHintSelections,
+    legacyHint,
+    customTweakRaw,
+  });
+  await svc.from("bathroom_generations").upsert(
+    {
+      id: generationId,
+      session_id: viewer.anonymousSessionId,
+      user_id: viewer.userId,
+      project_id: projectId,
+      selected_style: selectedStyleConfig.name,
+      user_description: userDescriptionRegen || null,
+      uploaded_image_url: project.before_storage_path,
       generated_image_url: latest.storage_path,
+      tweaks_used: tweakRows,
+      estimate_low: estimateFromImages.estimateRange.min,
+      estimate_expected: Math.round((estimateFromImages.estimateRange.min + estimateFromImages.estimateRange.max) / 2),
+      estimate_high: estimateFromImages.estimateRange.max,
       estimate_min: estimateFromImages.estimateRange.min,
       estimate_max: estimateFromImages.estimateRange.max,
+      scope_of_work: scopeOfWorkFromEstimate(estimateFromImages),
+      contractor_notes: null,
+      status: "completed",
       attribution: mergedGenerationAttribution,
-    })
-    .eq("id", generationId);
+      metadata: {
+        regenerated_at: new Date().toISOString(),
+      },
+    },
+    { onConflict: "id" },
+  );
 
   await trackTryEvent({
     eventType: "generation_completed",
@@ -3085,10 +3210,32 @@ export async function trackConnectClickedAction(
   return { success: true };
 }
 
+function userFacingLeadInsertError(err: { message: string; code?: string }): string {
+  const code = String(err.code ?? "");
+  const msg = err.message.toLowerCase();
+  if (code === "23503" || msg.includes("foreign key") || msg.includes("violates foreign key")) {
+    return "That preview is no longer linked to your session (it may have expired). Create a new mockup on /try and submit the form again.";
+  }
+  if (process.env.NODE_ENV !== "production") {
+    return `Could not save lead: ${err.message}`;
+  }
+  return "We couldn’t save your request. Please try again in a moment.";
+}
+
+function leadInsertErrorCode(err: { message: string; code?: string }): string {
+  const code = String(err.code ?? "");
+  const msg = err.message.toLowerCase();
+  if (code === "23503" || msg.includes("foreign key")) return "generation_missing_or_invalid";
+  if (code === "42501" || msg.includes("row level security")) return "permission_denied";
+  if (code === "23514" || msg.includes("check constraint")) return "invalid_status_or_constraint";
+  if (code === "22P02" || msg.includes("invalid input syntax")) return "invalid_input";
+  return "insert_failed";
+}
+
 export async function submitBathroomLeadAction(
   _prev: unknown,
   formData: FormData,
-): Promise<{ error: string } | { success: true }> {
+): Promise<{ error: string; errorCode?: string } | { success: true; leadId: string }> {
   const generationId = str(formData, "generation_id");
   const projectId = str(formData, "project_id");
   const selectedStyle = str(formData, "selected_style");
@@ -3123,46 +3270,123 @@ export async function submitBathroomLeadAction(
   const estimateReasoning = safeJson("estimate_reasoning_json");
   const estimateAssumptions = safeJson("estimate_assumptions_json");
 
-  if (!generationId || !selectedStyle) return { error: "Missing generation details." };
+  if (!generationId || !selectedStyle) return { error: "Missing generation details.", errorCode: "missing_generation_details" };
   if (!zipCode) {
-    return { error: "Please enter a valid US ZIP code (5 digits, or ZIP+4)." };
+    return { error: "Please enter a valid US ZIP code (5 digits, or ZIP+4).", errorCode: "invalid_zip_code" };
   }
   if (!firstName || !email || !phone || !timeline || !budgetRange || !preferredContactMethod) {
-    return { error: "Please complete all required fields." };
+    return { error: "Please complete all required fields.", errorCode: "missing_required_fields" };
   }
 
   const viewer = await getViewerContext(true);
   const incomingAttribution = attributionFromFormData(formData);
   await persistViewerAttribution({ viewer, attribution: incomingAttribution });
   const svc = createServiceClient();
-  await svc.from("leads").insert({
-    generation_id: generationId,
-    first_name: firstName,
-    last_name: lastName || null,
-    name,
-    email,
-    phone,
-    street_address: streetAddress || null,
-    zip_code: zipCode,
-    timeline,
-    budget_range: budgetRange,
-    preferred_contact_method: preferredContactMethod,
-    best_contact_time: bestContactTime || null,
-    project_notes: notes || null,
-    selected_style: selectedStyle,
-    estimate_min: estimateMin,
-    estimate_max: estimateMax,
-    estimate_breakdown: estimateBreakdown,
-    estimate_detailed_breakdown: estimateDetailedBreakdown,
-    estimate_reasoning: estimateReasoning,
-    estimate_assumptions: estimateAssumptions,
-    estimate_confidence: estimateConfidence || null,
-    attribution: incomingAttribution,
-  });
+  const { data: generationRow, error: generationLoadError } = await svc
+    .from("bathroom_generations")
+    .select(
+      "id, session_id, uploaded_image_url, generated_image_url, selected_style, estimate_low, estimate_expected, estimate_high, estimate_confidence, scope_of_work, contractor_notes, estimate_min, estimate_max, try_estimate_snapshot",
+    )
+    .eq("id", generationId)
+    .maybeSingle();
+  if (generationLoadError) {
+    console.error("[try] bathroom_generations load failed before lead insert:", generationLoadError.message);
+    return {
+      error: "We couldn’t load this project snapshot. Please regenerate and try again.",
+      errorCode: "generation_load_failed",
+    };
+  }
+  if (!generationRow) {
+    return {
+      error: "That preview could not be found. Please create a new preview and submit again.",
+      errorCode: "generation_not_found",
+    };
+  }
+
+  const resolvedEstimateLow = Number(generationRow.estimate_low ?? estimateMin ?? generationRow.estimate_min ?? 0);
+  const resolvedEstimateHigh = Number(generationRow.estimate_high ?? estimateMax ?? generationRow.estimate_max ?? 0);
+  const resolvedEstimateExpected =
+    generationRow.estimate_expected != null
+      ? Number(generationRow.estimate_expected)
+      : Math.round((resolvedEstimateLow + resolvedEstimateHigh) / 2);
+  const resolvedSessionId =
+    typeof generationRow.session_id === "string" && generationRow.session_id.trim()
+      ? generationRow.session_id.trim()
+      : viewer.anonymousSessionId;
+  const scopeOfWorkFromForm =
+    estimateDetailedBreakdown || estimateReasoning || estimateAssumptions
+      ? {
+          detailed_breakdown: estimateDetailedBreakdown,
+          reasoning: estimateReasoning,
+          assumptions: estimateAssumptions,
+          estimate_breakdown: estimateBreakdown,
+        }
+      : null;
+  const resolvedScopeOfWork =
+    generationRow.scope_of_work ??
+    scopeOfWorkFromForm ??
+    (generationRow.try_estimate_snapshot ? { try_estimate_snapshot: generationRow.try_estimate_snapshot } : null);
+
+  const { data: insertedLead, error: leadInsertError } = await svc
+    .from("leads")
+    .insert({
+      generation_id: generationId,
+      session_id: resolvedSessionId ?? null,
+      first_name: firstName,
+      last_name: lastName || null,
+      name,
+      email,
+      phone,
+      street_address: streetAddress || null,
+      zip_code: zipCode,
+      timeline,
+      budget_range: budgetRange,
+      preferred_contact_method: preferredContactMethod,
+      best_contact_time: bestContactTime || null,
+      project_notes: notes || null,
+      selected_style: selectedStyle || String(generationRow.selected_style ?? ""),
+      uploaded_image_url: String(generationRow.uploaded_image_url ?? "") || null,
+      generated_image_url: String(generationRow.generated_image_url ?? "") || null,
+      estimate_low: resolvedEstimateLow,
+      estimate_expected: resolvedEstimateExpected,
+      estimate_high: resolvedEstimateHigh,
+      scope_of_work: resolvedScopeOfWork,
+      contractor_notes: generationRow.contractor_notes ?? null,
+      estimate_min: estimateMin,
+      estimate_max: estimateMax,
+      estimate_breakdown: estimateBreakdown,
+      estimate_detailed_breakdown: estimateDetailedBreakdown,
+      estimate_reasoning: estimateReasoning,
+      estimate_assumptions: estimateAssumptions,
+      estimate_confidence: estimateConfidence || generationRow.estimate_confidence || null,
+      attribution: incomingAttribution,
+    })
+    .select("id")
+    .single();
+  if (leadInsertError) {
+    console.error("[try] leads insert failed:", leadInsertError.message, leadInsertError);
+    return { error: userFacingLeadInsertError(leadInsertError), errorCode: leadInsertErrorCode(leadInsertError) };
+  }
+  if (!insertedLead?.id) {
+    console.error("[try] leads insert returned no row");
+    return {
+      error:
+        process.env.NODE_ENV !== "production"
+          ? "Lead insert returned no row (check RLS and grants)."
+          : "We couldn’t save your request. Please try again in a moment.",
+      errorCode: "insert_returned_no_row",
+    };
+  }
   if (process.env.NODE_ENV !== "production" && incomingAttribution) {
     console.log("[renovision][attribution][lead]", { generationId, projectId, attribution: incomingAttribution });
   }
-  await svc.from("bathroom_generations").update({ lead_submitted: true }).eq("id", generationId);
+  const { error: generationFlagError } = await svc
+    .from("bathroom_generations")
+    .update({ lead_submitted: true })
+    .eq("id", generationId);
+  if (generationFlagError) {
+    console.error("[try] bathroom_generations lead_submitted update failed:", generationFlagError.message);
+  }
 
   await trackTryEvent({
     eventType: "lead_submitted",
@@ -3175,5 +3399,8 @@ export async function submitBathroomLeadAction(
   revalidatePath("/try");
   revalidatePath("/upload");
   revalidatePath("/projects");
-  return { success: true };
+  revalidatePath("/admin/contractors");
+  revalidatePath("/admin/leads");
+  console.info("[try] lead_inserted", { leadId: insertedLead.id, generationId, projectId });
+  return { success: true, leadId: insertedLead.id };
 }

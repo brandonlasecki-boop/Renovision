@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AnalyticsTracker } from "@/components/renovision/analytics-tracker";
 import { AttributionTracker } from "@/components/renovision/attribution-tracker";
 import { Toaster } from "@/components/ui/sonner";
 import { GOOGLE_ADS_ID } from "@/lib/analytics/google-ads";
@@ -37,6 +38,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <Suspense fallback={null}>
+          <AnalyticsTracker />
           <AttributionTracker />
         </Suspense>
         {children}

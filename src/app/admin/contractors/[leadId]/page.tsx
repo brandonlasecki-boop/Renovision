@@ -1,20 +1,34 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { fetchAdminContractorLeadDetail } from "@/lib/data/admin-contractors";
+import { revalidatePath } from "next/cache";
+import { fetchAdminContractorDetail, parseZipCodesInput } from "@/lib/data/admin-contractor-accounts";
+import { requireAdminUser } from "@/app/admin/require-admin";
+import { createServiceClient } from "@/lib/supabase/service";
 
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+export const dynamic = "force-dynamic";
 
-function EstimateChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{value || "—"}</p>
-    </div>
-  );
+async function updateContractorAction(formData: FormData) {
+  "use server";
+  await requireAdminUser();
+  const contractorId = String(formData.get("contractor_id") ?? "").trim();
+  const companyName = String(formData.get("company_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  if (!contractorId || !companyName || !email) return;
+  const svc = createServiceClient();
+  await svc
+    .from("contractors")
+    .update({
+      company_name: companyName.slice(0, 200),
+      contact_name: String(formData.get("contact_name") ?? "").trim().slice(0, 200) || null,
+      email: email.slice(0, 320),
+      phone: String(formData.get("phone") ?? "").trim().slice(0, 80) || null,
+      service_zip_codes: parseZipCodesInput(String(formData.get("service_zip_codes") ?? "")),
+      notes: String(formData.get("notes") ?? "").trim().slice(0, 4000) || null,
+      active: String(formData.get("active") ?? "") === "1",
+    })
+    .eq("id", contractorId);
+  revalidatePath("/admin/contractors");
+  revalidatePath(`/admin/contractors/${contractorId}`);
 }
 
 export default async function AdminContractorLeadDetailPage({
@@ -23,7 +37,7 @@ export default async function AdminContractorLeadDetailPage({
   params: Promise<{ leadId: string }>;
 }) {
   const { leadId } = await params;
-  const detail = await fetchAdminContractorLeadDetail(leadId);
+  const detail = await fetchAdminContractorDetail(leadId);
   if (!detail) notFound();
 
   return (
@@ -31,152 +45,146 @@ export default async function AdminContractorLeadDetailPage({
       <section className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-renovision-navy">Lead profile</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{detail.fullName || "Unknown lead"}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Submitted {new Date(detail.createdAt).toLocaleString()} · Style: {detail.selectedStyle || "—"}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-renovision-navy">Contractor profile</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">{detail.companyName}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Created {new Date(detail.createdAt).toLocaleString()}</p>
           </div>
           <Link href="/admin/contractors" className="text-sm font-medium text-renovision-navy underline-offset-4 hover:underline">
-            Back to lead list
+            Back to contractors
           </Link>
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <EstimateChip label="Email" value={detail.email} />
-        <EstimateChip label="Phone" value={detail.phone} />
-        <EstimateChip label="Street address" value={detail.streetAddress || "—"} />
-        <EstimateChip label="ZIP" value={detail.zipCode} />
-        <EstimateChip label="Timeline" value={detail.timeline} />
-        <EstimateChip label="Budget range" value={detail.budgetRange} />
-        <EstimateChip label="Preferred contact" value={detail.preferredContactMethod} />
-        <EstimateChip label="Best contact time" value={detail.bestContactTime || "Anytime"} />
-        <EstimateChip
-          label="Estimate range"
-          value={`${usd.format(detail.estimateMin)}-${usd.format(detail.estimateMax)}`}
-        />
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Company</p><p className="mt-1 text-sm font-medium text-foreground">{detail.companyName}</p></div>
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Contact</p><p className="mt-1 text-sm font-medium text-foreground">{detail.contactName || "—"}</p></div>
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Email</p><p className="mt-1 text-sm font-medium text-foreground">{detail.email || "—"}</p></div>
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</p><p className="mt-1 text-sm font-medium text-foreground">{detail.phone || "—"}</p></div>
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Active</p><p className="mt-1 text-sm font-medium text-foreground">{detail.active ? "Yes" : "No"}</p></div>
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Service ZIP codes</p><p className="mt-1 text-sm font-medium text-foreground">{detail.serviceZipCodes.length ? detail.serviceZipCodes.join(", ") : "—"}</p></div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-          <div className="border-b border-border/70 px-4 py-3">
-            <p className="text-sm font-semibold">Original photo</p>
+      <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
+        <h2 className="text-lg font-semibold tracking-tight">Edit contractor</h2>
+        <form action={updateContractorAction} className="mt-3 grid gap-3 lg:grid-cols-2">
+          <input type="hidden" name="contractor_id" value={detail.id} />
+          <label className="text-xs text-muted-foreground">
+            Company name *
+            <input name="company_name" required defaultValue={detail.companyName} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Contact name
+            <input name="contact_name" defaultValue={detail.contactName} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Email *
+            <input name="email" type="email" required defaultValue={detail.email} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Phone
+            <input name="phone" defaultValue={detail.phone} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm" />
+          </label>
+          <label className="text-xs text-muted-foreground lg:col-span-2">
+            Service ZIP codes (comma separated)
+            <input
+              name="service_zip_codes"
+              defaultValue={detail.serviceZipCodes.join(", ")}
+              className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-muted-foreground lg:col-span-2">
+            Notes
+            <textarea name="notes" rows={4} defaultValue={detail.notes} className="mt-1 block w-full rounded-md border border-input bg-background px-2 py-2 text-sm" />
+          </label>
+          <label className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" name="active" value="1" defaultChecked={detail.active} className="size-4 rounded border-input" />
+            Active
+          </label>
+          <div className="lg:col-span-2">
+            <button type="submit" className="h-9 rounded-md border border-border px-3 text-sm hover:bg-muted/40">
+              Save contractor
+            </button>
           </div>
-          <div className="p-4">
-            {detail.originalImageUrl ? (
-              <img
-                src={detail.originalImageUrl}
-                alt="Original homeowner upload"
-                className="w-full rounded-xl border border-border/60 object-cover"
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">No original image available.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-          <div className="border-b border-border/70 px-4 py-3">
-            <p className="text-sm font-semibold">Latest version {detail.latestVersionLabel ? `(${detail.latestVersionLabel})` : ""}</p>
-          </div>
-          <div className="p-4">
-            {detail.latestImageUrl ? (
-              <img
-                src={detail.latestImageUrl}
-                alt="Latest generated version"
-                className="w-full rounded-xl border border-border/60 object-cover"
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">No latest image available.</p>
-            )}
-          </div>
-        </div>
+        </form>
       </section>
 
       <section className="space-y-5 rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">Estimate detail</h2>
-          <p className="text-sm text-muted-foreground">
-            Confidence: {detail.estimateConfidence || "—"} · Project: {detail.projectId ?? "—"} · Generation:{" "}
-            {detail.generationId ?? "—"}
-          </p>
+          <h2 className="text-lg font-semibold tracking-tight">Assigned / shared leads</h2>
         </div>
-
-        {detail.estimateBreakdown ? (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <EstimateChip
-              label="Materials"
-              value={`${usd.format(detail.estimateBreakdown.materials.min)}-${usd.format(detail.estimateBreakdown.materials.max)}`}
-            />
-            <EstimateChip
-              label="Labor"
-              value={`${usd.format(detail.estimateBreakdown.labor.min)}-${usd.format(detail.estimateBreakdown.labor.max)}`}
-            />
-            <EstimateChip
-              label="Fixtures & finishes"
-              value={`${usd.format(detail.estimateBreakdown.fixtures.min)}-${usd.format(detail.estimateBreakdown.fixtures.max)}`}
-            />
-          </div>
-        ) : null}
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <h3 className="text-sm font-semibold">Line items</h3>
-            {detail.estimateDetailedBreakdown.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No detailed line items stored for this lead.</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {detail.estimateDetailedBreakdown.map((line, index) => (
-                  <div key={`${line.category}-${index}`} className="rounded-xl border border-border/70 bg-muted/20 p-3">
-                    <p className="text-sm font-medium">
-                      {line.category}{" "}
-                      <span className="tabular-nums text-renovision-navy">
-                        {usd.format(line.min)}-{usd.format(line.max)}
-                      </span>
-                    </p>
-                    {line.reason ? <p className="mt-1 text-xs text-muted-foreground">{line.reason}</p> : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold">Why this estimate</h3>
-              {detail.estimateReasoning.length === 0 ? (
-                <p className="mt-2 text-sm text-muted-foreground">No rationale captured.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/60 bg-muted/20">
+                <th className="px-3 py-2 font-medium">Lead</th>
+                <th className="px-3 py-2 font-medium">Lead status</th>
+                <th className="px-3 py-2 font-medium">Assignment status</th>
+                <th className="px-3 py-2 font-medium">Shared at</th>
+                <th className="px-3 py-2 font-medium">Open</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.assignedOrSharedLeads.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    No assigned/shared leads.
+                  </td>
+                </tr>
               ) : (
-                <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {detail.estimateReasoning.map((point, index) => (
-                    <li key={`${index}-${point}`}>- {point}</li>
-                  ))}
-                </ul>
+                detail.assignedOrSharedLeads.map((row) => (
+                  <tr key={row.assignmentId} className="border-b border-border/40 last:border-0">
+                    <td className="px-3 py-2">{row.leadName}</td>
+                    <td className="px-3 py-2">{row.leadStatus}</td>
+                    <td className="px-3 py-2">{row.assignmentStatus}</td>
+                    <td className="px-3 py-2">{row.sharedAt ? new Date(row.sharedAt).toLocaleString() : "—"}</td>
+                    <td className="px-3 py-2">
+                      <Link href={`/admin/leads/${row.leadId}`} className="underline-offset-4 hover:underline">
+                        View lead
+                      </Link>
+                    </td>
+                  </tr>
+                ))
               )}
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">Assumptions and risks</h3>
-              {detail.estimateAssumptions.length === 0 ? (
-                <p className="mt-2 text-sm text-muted-foreground">No assumptions captured.</p>
-              ) : (
-                <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {detail.estimateAssumptions.map((point, index) => (
-                    <li key={`${index}-${point}`}>- {point}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      {detail.notes ? (
-        <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
-          <h2 className="text-sm font-semibold">Project notes</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{detail.notes}</p>
-        </section>
-      ) : null}
+      <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
+        <h2 className="text-sm font-semibold">Lead response history</h2>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[920px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/60 bg-muted/20">
+                <th className="px-3 py-2 font-medium">Created</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Viewed at</th>
+                <th className="px-3 py-2 font-medium">Response</th>
+                <th className="px-3 py-2 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.leadResponseHistory.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                    No response history.
+                  </td>
+                </tr>
+              ) : (
+                detail.leadResponseHistory.map((row) => (
+                  <tr key={row.assignmentId} className="border-b border-border/40 last:border-0">
+                    <td className="px-3 py-2">{new Date(row.createdAt).toLocaleString()}</td>
+                    <td className="px-3 py-2">{row.assignmentStatus}</td>
+                    <td className="px-3 py-2">{row.viewedAt ? new Date(row.viewedAt).toLocaleString() : "—"}</td>
+                    <td className="px-3 py-2">{row.contractorResponse || "—"}</td>
+                    <td className="px-3 py-2">{row.notes || "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

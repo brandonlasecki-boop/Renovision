@@ -37,7 +37,9 @@ import {
 import { BeforeAfterCompareSlider } from "@/components/homeowner/before-after-compare-slider";
 import { RenovisionGeneratingLoader } from "@/components/homeowner/renovision-generating-loader";
 import { getStoredAttribution, type RenovisionAttribution } from "@/lib/renovision/attribution";
-import { trackEvent, trackGoogleAdsLeadConversion } from "@/lib/analytics/google-ads";
+import { trackEvent as trackGoogleAdsEvent, trackGoogleAdsLeadConversion } from "@/lib/analytics/google-ads";
+import { trackEvent as trackAnalyticsEvent } from "@/lib/analytics/renovision-analytics";
+import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
 import { cn } from "@/lib/utils";
 
 const usd = new Intl.NumberFormat("en-US", {
@@ -48,6 +50,7 @@ const usd = new Intl.NumberFormat("en-US", {
 const MAX_SAFE_PREVIEW_BYTES = 8 * 1024 * 1024;
 /** Matches server `generateBathroomMockupAction` limit; server normalizes/resizes large photos. */
 const MAX_TRY_UPLOAD_BYTES = 20 * 1024 * 1024;
+const ANALYTICS_PROVIDER = "vertex";
 
 /** Post-preview style switches (original upload + new style). Order: Spa default first elsewhere. */
 const UPLOAD_TEASER_AFTER =
@@ -234,6 +237,18 @@ export function HomeownerTryClient({
   const [compareRightKey, setCompareRightKey] = useState<string>("");
   const [saveTweakChecked, setSaveTweakChecked] = useState<Record<number, boolean>>({});
   const [designTweakChecked, setDesignTweakChecked] = useState<Record<number, boolean>>({});
+  const hasTrackedLeadFormStartedRef = useRef(false);
+  const trackLeadFormStartedOnce = useCallback(() => {
+    if (hasTrackedLeadFormStartedRef.current) return;
+    hasTrackedLeadFormStartedRef.current = true;
+    void trackAnalyticsEvent("lead_form_started");
+  }, []);
+
+  const hasTrackedEstimateViewedRef = useRef(false);
+  const generationStartedAtRef = useRef<number | null>(null);
+  const generationStyleIdRef = useRef<string | null>(null);
+  const pendingLeadMetaRef = useRef<{ timeline?: string; budget_range?: string; zip_code?: string } | null>(null);
+  const lastResultGenerationIdRef = useRef<string | null>(null);
 
   async function compressThenGenerate(
     prev: Awaited<ReturnType<typeof generateBathroomMockupAction>> | undefined,
@@ -299,18 +314,33 @@ export function HomeownerTryClient({
       setFirstUploadPreviewUrl(null);
       setLoaderBeforeBlob(null);
       setTryResultCustomizeOpen(false);
-      trackEvent("remodel_generated");
-      trackEvent("upload_completed", { style: generateState.selectedStyle });
+      const startedAt = generationStartedAtRef.current;
+      const durationMs = startedAt ? Math.max(0, Date.now() - startedAt) : undefined;
+      void trackAnalyticsEvent("generation_completed", {
+        style_id: generationStyleIdRef.current ?? generateState.selectedStyle,
+        provider: ANALYTICS_PROVIDER,
+        duration_ms: durationMs,
+      });
+      void trackAnalyticsEvent("upload_completed", {
+        style_id: generateState.selectedStyle,
+      });
+      trackGoogleAdsEvent("remodel_generated");
     }
   }, [generateState, setLoaderBeforeBlob]);
 
   useEffect(() => {
     if (!generateState || !("error" in generateState)) return;
+    void trackAnalyticsEvent("upload_failed", { error_code: "upload_generate_failed" });
+    void trackAnalyticsEvent("generation_failed", {
+      style_id: generationStyleIdRef.current ?? selectedStyle,
+      provider: ANALYTICS_PROVIDER,
+      error_code: "upload_generate_failed",
+    });
     const lib = bathroomPhotoLibraryInputRef.current;
     const cam = bathroomPhotoCameraInputRef.current;
     if (lib) lib.value = "";
     if (cam) cam.value = "";
-  }, [generateState]);
+  }, [generateState, selectedStyle]);
 
   const slowGenerationToastMs = 120_000;
 
@@ -401,14 +431,26 @@ export function HomeownerTryClient({
           : prev,
       );
       setStep("result");
+      const startedAt = generationStartedAtRef.current;
+      const durationMs = startedAt ? Math.max(0, Date.now() - startedAt) : undefined;
+      void trackAnalyticsEvent("generation_completed", {
+        style_id: generationStyleIdRef.current ?? regenState.selectedStyle,
+        provider: ANALYTICS_PROVIDER,
+        duration_ms: durationMs,
+      });
     }
   }, [regenState]);
 
   useEffect(() => {
     if (regenState && "error" in regenState && regenState.error) {
+      void trackAnalyticsEvent("generation_failed", {
+        style_id: generationStyleIdRef.current ?? generation?.selectedStyle ?? selectedStyle,
+        provider: ANALYTICS_PROVIDER,
+        error_code: "regenerate_failed",
+      });
       toast.error("Could not update preview", { description: regenState.error.slice(0, 400) });
     }
-  }, [regenState]);
+  }, [regenState, generation?.selectedStyle, selectedStyle]);
 
   useEffect(() => {
     if (versionState && "success" in versionState && versionState.success) {
@@ -446,13 +488,46 @@ export function HomeownerTryClient({
   }, [connectState]);
 
   useEffect(() => {
+    if (!leadOpen) return;
+    trackLeadFormStartedOnce();
+  }, [leadOpen, trackLeadFormStartedOnce]);
+
+  useEffect(() => {
     if (leadState && "success" in leadState && leadState.success) {
       if (leadSubmitted) return;
       setLeadSubmitted(true);
-      trackEvent("connect_me_submitted");
+      if ("leadId" in leadState && typeof leadState.leadId === "string") {
+        toast.success("Lead saved", {
+          description: `Supabase → Table Editor → public.leads → filter id = ${leadState.leadId}`,
+          duration: 16_000,
+        });
+      }
+      void trackAnalyticsEvent("lead_submitted", pendingLeadMetaRef.current ?? {});
+      trackGoogleAdsEvent("connect_me_submitted");
       trackGoogleAdsLeadConversion();
     }
   }, [leadState, leadSubmitted]);
+
+  useEffect(() => {
+    if (!leadState || !("error" in leadState)) return;
+    void trackAnalyticsEvent("lead_submit_failed", {
+      error_code:
+        "errorCode" in leadState && typeof leadState.errorCode === "string"
+          ? leadState.errorCode
+          : "unknown",
+    });
+    toast.error("Lead not saved", { description: leadState.error });
+  }, [leadState]);
+
+  useEffect(() => {
+    if (step !== "result" || !generation) return;
+    if (lastResultGenerationIdRef.current === generation.generationId) return;
+    lastResultGenerationIdRef.current = generation.generationId;
+    void trackAnalyticsEvent("result_viewed", {
+      style_id: generation.selectedStyle,
+      style_name: generation.styleName,
+    });
+  }, [step, generation]);
 
   const tweakPanelResetKey = useMemo(() => {
     if (!generation) return "";
@@ -655,6 +730,7 @@ export function HomeownerTryClient({
 
   function handleBathroomPhotoFileChosen(file: File, via: "camera" | "library") {
     if (file.size > MAX_TRY_UPLOAD_BYTES) {
+      void trackAnalyticsEvent("upload_failed", { error_code: "file_too_large" });
       setFirstUploadPreviewUrl(null);
       setLoaderBeforeBlob(null);
       toast.error("Photo is too large.", {
@@ -666,11 +742,6 @@ export function HomeownerTryClient({
       if (cam) cam.value = "";
       return;
     }
-    trackEvent("photo_upload_success", {
-      file_type: file.type || "unknown",
-      source: isLikelyMobileBrowser() ? "mobile" : "desktop",
-      via,
-    });
     const objectUrl = URL.createObjectURL(file);
     setLoaderBeforeBlob(objectUrl);
     if (isLikelyHeicUpload(file)) {
@@ -763,7 +834,13 @@ export function HomeownerTryClient({
               action={generateAction}
               className="space-y-5 rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-6"
               onSubmit={() => {
-                trackEvent("upload_started", { style: selectedStyle });
+                generationStartedAtRef.current = Date.now();
+                generationStyleIdRef.current = selectedStyle;
+                void trackAnalyticsEvent("upload_started", { style_id: selectedStyle });
+                void trackAnalyticsEvent("generation_started", {
+                  style_id: selectedStyle,
+                  provider: ANALYTICS_PROVIDER,
+                });
               }}
             >
             <input type="hidden" name="selected_style" value={selectedStyle} />
@@ -833,6 +910,7 @@ export function HomeownerTryClient({
               <div className="grid grid-cols-1 gap-3">
                 <Button
                   type="button"
+                  data-analytics-id="upload-cta"
                   className="h-14 w-full justify-center gap-2.5 rounded-2xl bg-renovision-navy text-base font-semibold text-white shadow-lg shadow-renovision-navy/25 hover:bg-renovision-navy/90 disabled:opacity-60 sm:h-16 sm:text-lg"
                   disabled={generatePending}
                   onClick={() => bathroomPhotoCameraInputRef.current?.click()}
@@ -842,6 +920,7 @@ export function HomeownerTryClient({
                 </Button>
                 <Button
                   type="button"
+                  data-analytics-id="upload-cta"
                   variant="outline"
                   className="h-12 w-full justify-center gap-2 rounded-2xl border border-border/80 bg-background text-sm font-medium text-muted-foreground shadow-none hover:bg-muted/40 hover:text-foreground disabled:opacity-60 sm:h-14 sm:text-base"
                   disabled={generatePending}
@@ -907,6 +986,7 @@ export function HomeownerTryClient({
                 {(generation.mockupVersions?.length ?? 0) === 0 ? null : !compareDesignsOpen ? (
                   <Button
                     type="button"
+                    data-analytics-id="compare-designs-toggle"
                     variant="outline"
                     size="sm"
                     className="h-10 w-full rounded-xl text-sm font-semibold shadow-sm"
@@ -915,7 +995,7 @@ export function HomeownerTryClient({
                       setCompareDesignsOpen(true);
                       setCompareLeftKey("original");
                       setCompareRightKey(generation.activeMockupId);
-                      trackEvent("try_compare_designs_open");
+                      void trackAnalyticsEvent("scope_viewed", { source: "compare_designs_panel" });
                     }}
                   >
                     Compare Designs
@@ -986,6 +1066,7 @@ export function HomeownerTryClient({
                   </p>
                   <Button
                     type="button"
+                    data-analytics-id="customize-design-cta"
                     size="lg"
                     className="h-12 w-full rounded-xl text-base font-semibold shadow-lg sm:h-14 sm:text-lg"
                     onClick={() => setTryResultCustomizeOpen(true)}
@@ -1014,7 +1095,20 @@ export function HomeownerTryClient({
                     );
                   }
                   return (
-                    <form key={id} action={regenAction} className="inline shrink-0">
+                    <form
+                      key={id}
+                      action={regenAction}
+                      className="inline shrink-0"
+                      onSubmit={() => {
+                        generationStartedAtRef.current = Date.now();
+                        generationStyleIdRef.current = id;
+                        void trackAnalyticsEvent("refinement_clicked", { refinement_type: "style_switch" });
+                        void trackAnalyticsEvent("generation_started", {
+                          style_id: id,
+                          provider: ANALYTICS_PROVIDER,
+                        });
+                      }}
+                    >
                       <input type="hidden" name="generation_id" value={generation.generationId} />
                       <input type="hidden" name="project_id" value={generation.projectId} />
                       <input type="hidden" name="selected_style" value={id} />
@@ -1027,7 +1121,12 @@ export function HomeownerTryClient({
                         size="sm"
                         disabled={regenPending}
                         className="h-9 shrink-0 whitespace-nowrap rounded-full border-border/80 px-2.5 text-xs font-semibold hover:border-renovision-orange/50 sm:px-3.5 sm:text-sm"
-                        onClick={() => trackEvent("style_selected", { style: id })}
+                        onClick={() =>
+                          void trackAnalyticsEvent("style_selected", {
+                            style_id: id,
+                            style_name: getBathroomStyleById(id)?.name ?? displayStyleName(id, label),
+                          })
+                        }
                       >
                         {label}
                       </Button>
@@ -1039,7 +1138,21 @@ export function HomeownerTryClient({
 
             <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm ring-1 ring-black/[0.04]">
               <div className="p-4 sm:p-6">
-                <form action={regenAction} className="space-y-5">
+                <form
+                  action={regenAction}
+                  className="space-y-5"
+                  onSubmit={(e) => {
+                    const formData = new FormData(e.currentTarget);
+                    const styleId = String(formData.get("selected_style") ?? generation.selectedStyle);
+                    generationStartedAtRef.current = Date.now();
+                    generationStyleIdRef.current = styleId;
+                    void trackAnalyticsEvent("refinement_clicked", { refinement_type: "custom_refinement" });
+                    void trackAnalyticsEvent("generation_started", {
+                      style_id: styleId,
+                      provider: ANALYTICS_PROVIDER,
+                    });
+                  }}
+                >
                   <input type="hidden" name="generation_id" value={generation.generationId} />
                   <input type="hidden" name="project_id" value={generation.projectId} />
                   <input type="hidden" name="selected_style" value={generation.selectedStyle} />
@@ -1225,7 +1338,15 @@ export function HomeownerTryClient({
               </div>
 
               <details className="group border-t border-border/70 bg-muted/20">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/35 sm:px-6 [&::-webkit-details-marker]:hidden">
+                <summary
+                  className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 outline-offset-2 marker:content-none transition-colors hover:bg-muted/35 sm:px-6 [&::-webkit-details-marker]:hidden"
+                  onClick={() => {
+                    if (hasTrackedEstimateViewedRef.current) return;
+                    hasTrackedEstimateViewedRef.current = true;
+                    void trackAnalyticsEvent("estimate_viewed");
+                    void trackAnalyticsEvent("scope_viewed", { section: "breakdown" });
+                  }}
+                >
                   <div className="min-w-0 text-left">
                     <p className="text-sm font-semibold text-foreground">Breakdown</p>
                   </div>
@@ -1320,14 +1441,16 @@ export function HomeownerTryClient({
                   <input type="hidden" name="attribution_json" value={attributionJson} />
                   <Button
                     type="submit"
+                    data-analytics-id="contractor-cta"
                     className="h-11 w-full rounded-xl text-sm font-semibold"
-                    onClick={() => trackEvent("connect_me_clicked")}
+                    onClick={() => void trackAnalyticsEvent("contractor_cta_clicked")}
                   >
                     Connect Me With a Remodeler
                   </Button>
                 </form>
                 <Button
                   type="button"
+                  data-analytics-id="start-new-project"
                   variant="outline"
                   className="h-11 w-full rounded-xl text-sm font-semibold"
                   onClick={() => {
@@ -1355,6 +1478,7 @@ export function HomeownerTryClient({
                         href={`/signup?next=${encodeURIComponent(
                           `/try?restore_generation_id=${encodeURIComponent(generation.generationId)}&restore_project_id=${encodeURIComponent(generation.projectId)}`,
                         )}`}
+                        data-analytics-id="signup-cta"
                         className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-renovision-navy px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-renovision-navy/90 sm:w-auto sm:min-w-[12rem]"
                       >
                         Create free account
@@ -1363,6 +1487,7 @@ export function HomeownerTryClient({
                         href={`/login?next=${encodeURIComponent(
                           `/try?restore_generation_id=${encodeURIComponent(generation.generationId)}&restore_project_id=${encodeURIComponent(generation.projectId)}`,
                         )}`}
+                        data-analytics-id="login-cta"
                         className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted sm:w-auto sm:min-w-[10rem]"
                       >
                         Log in
@@ -1392,6 +1517,7 @@ export function HomeownerTryClient({
                 <p className="text-xl font-semibold">Project details</p>
                 <button
                   type="button"
+                  data-analytics-id="lead-modal-close"
                   className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
                   onClick={() => setLeadOpen(false)}
                 >
@@ -1399,7 +1525,21 @@ export function HomeownerTryClient({
                 </button>
               </div>
               {!leadSubmitted ? (
-                <form action={leadAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+                <form
+                  action={leadAction}
+                  className="mt-4 grid gap-3 sm:grid-cols-2"
+                  onSubmit={(e) => {
+                    const formData = new FormData(e.currentTarget);
+                    const timeline = String(formData.get("timeline") ?? "").trim();
+                    const budgetRange = String(formData.get("budget_range") ?? "").trim();
+                    const zipCode = String(formData.get("zip_code") ?? "").trim();
+                    pendingLeadMetaRef.current = {
+                      ...(timeline ? { timeline } : {}),
+                      ...(budgetRange ? { budget_range: budgetRange } : {}),
+                      ...(zipCode ? { zip_code: zipCode } : {}),
+                    };
+                  }}
+                >
                 <input type="hidden" name="generation_id" value={generation.generationId} />
                 <input type="hidden" name="project_id" value={generation.projectId} />
                 <input type="hidden" name="selected_style" value={generation.styleName} />
@@ -1417,7 +1557,7 @@ export function HomeownerTryClient({
                 <input type="hidden" name="attribution_json" value={attributionJson} />
                 <div className="space-y-1">
                   <Label htmlFor="lead_first_name">First name</Label>
-                  <Input id="lead_first_name" name="first_name" required />
+                  <Input id="lead_first_name" name="first_name" required onFocus={trackLeadFormStartedOnce} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="lead_last_name">Last name (optional)</Label>
@@ -1515,7 +1655,7 @@ export function HomeownerTryClient({
                 </div>
                 {leadState && "error" in leadState ? <p className="text-sm text-destructive sm:col-span-2">{leadState.error}</p> : null}
                 <div className="sm:col-span-2">
-                  <Button type="submit" className="rounded-xl" disabled={leadPending}>
+                  <Button type="submit" data-analytics-id="lead-submit" className="rounded-xl" disabled={leadPending}>
                     {leadPending ? "Submitting…" : "Submit"}
                   </Button>
                 </div>
@@ -1525,6 +1665,12 @@ export function HomeownerTryClient({
                   <p className="text-sm font-medium text-renovision-teal">
                     Thanks. Your details were submitted and we&apos;ll connect you with remodelers.
                   </p>
+                  {leadState && "success" in leadState && leadState.success && "leadId" in leadState ? (
+                    <p className="break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
+                      Saved to Supabase table <span className="text-foreground">public.leads</span> — id{" "}
+                      <span className="select-all text-foreground">{leadState.leadId}</span>
+                    </p>
+                  ) : null}
                   <Button type="button" variant="outline" className="rounded-xl" onClick={() => setLeadOpen(false)}>
                     Done
                   </Button>

@@ -18,6 +18,8 @@
     "retail:smoke:loop": "node scripts/retail-journey-smoke-loop.mjs",
     "retail:smoke:loop:local": "node --env-file=.env.local scripts/retail-journey-smoke-loop.mjs",
     "vertex:smoke": "node scripts/vertex-mockup-smoke.mjs",
+    "analytics:seed:dev": "node --env-file=.env.local scripts/seed-analytics-dev.mjs",
+    "analytics:qa:journey": "node --env-file=.env.local scripts/qa-analytics-journey.mjs",
     "try:reencode-loop-video": "powershell -ExecutionPolicy Bypass -File scripts/reencode-looping-video.ps1",
     "storage:empty-project-photos": "node --env-file=.env.local scripts/empty-project-photos-bucket.mjs",
     "clear:app-data": "node --env-file=.env.local scripts/clear-all-app-data.mjs"

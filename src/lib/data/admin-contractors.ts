@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { PHOTOS_BUCKET } from "@/lib/supabase/constants";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -113,7 +114,42 @@ async function signPath(path: string | null): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+export type LatestLeadSummary = {
+  leadId: string;
+  createdAt: string;
+  email: string;
+};
+
+/** Newest row in `public.leads` (timestamps are UTC from Postgres). */
+export async function fetchLatestLeadSummary(): Promise<LatestLeadSummary | null> {
+  noStore();
+  const svc = createServiceClient();
+  const { data, error } = await svc
+    .from("leads")
+    .select("id, created_at, email")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    leadId: asText(data.id),
+    createdAt: asText(data.created_at),
+    email: asText(data.email),
+  };
+}
+
+/** Exact row count in `public.leads` (for admin diagnostics vs filtered list). */
+export async function fetchLeadsTotalCount(): Promise<number> {
+  noStore();
+  const svc = createServiceClient();
+  const { count, error } = await svc.from("leads").select("*", { count: "exact", head: true });
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function fetchAdminContractorLeads(search: string): Promise<AdminContractorLeadListRow[]> {
+  noStore();
   const svc = createServiceClient();
   const { data: leads, error } = await svc
     .from("leads")
@@ -183,6 +219,7 @@ export async function fetchAdminContractorLeads(search: string): Promise<AdminCo
 }
 
 export async function fetchAdminContractorLeadDetail(leadId: string): Promise<AdminContractorLeadDetail | null> {
+  noStore();
   const svc = createServiceClient();
   const id = leadId.trim();
   if (!id) return null;

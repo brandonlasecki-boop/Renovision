@@ -8,6 +8,7 @@ import {
   LANDING_DEMO_STYLE_OPTIONS,
 } from "@/components/landing/landing-demo-style-options";
 import { trackEvent } from "@/lib/analytics/google-ads";
+import { trackEvent as trackAnalyticsEvent } from "@/lib/analytics/renovision-analytics";
 import { getBathroomStyleById } from "@/lib/homeowner-try/bathroom-styles";
 import type { BathroomStyleId } from "@/lib/homeowner-try/bathroom-styles";
 import { cn } from "@/lib/utils";
@@ -224,6 +225,10 @@ export function LandingHeroTransformation() {
             title={getBathroomStyleById(opt.id)?.name ?? opt.pill}
             onClick={() => {
               trackEvent("style_selected", { style: opt.id });
+              void trackAnalyticsEvent("example_style_clicked", {
+                style_id: opt.id,
+                style_name: getBathroomStyleById(opt.id)?.name ?? opt.pill,
+              });
               setStyleId(opt.id);
             }}
             className={cn(
