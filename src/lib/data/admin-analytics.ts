@@ -1,5 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
+const ANALYTICS_REPORTING_TIMEZONE =
+  process.env.ADMIN_ANALYTICS_TIMEZONE?.trim() || "America/New_York";
+
 type RangeKey = "24h" | "7d" | "30d" | "custom";
 export type TrafficFilter = "customer" | "admin" | "all";
 export type ExportFilterOptions = {
@@ -62,6 +65,128 @@ type PageViewRow = {
   metadata?: Record<string, unknown> | null;
 };
 
+type AnalyticsFilterRow = {
+  session_id?: string;
+  session_type?: string | null;
+  normalized_source?: string | null;
+  normalized_referrer?: string | null;
+  referrer?: string | null;
+  utm_source?: string | null;
+  page_path?: string | null;
+  first_page?: string | null;
+  last_page?: string | null;
+  device_type?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+function utcFromZonedDateTime(
+  timeZone: string,
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  millisecond: number,
+): Date {
+  let utc = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(utc));
+    const read = (type: Intl.DateTimeFormatPartTypes) =>
+      Number.parseInt(parts.find((part) => part.type === type)?.value ?? "0", 10);
+    const localAsUtc = Date.UTC(
+      read("year"),
+      read("month") - 1,
+      read("day"),
+      read("hour"),
+      read("minute"),
+      read("second"),
+    );
+    const targetAsUtc = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+    const diff = targetAsUtc - localAsUtc;
+    if (diff === 0) return new Date(utc);
+    utc += diff;
+  }
+  return new Date(utc);
+}
+
+function dayBoundsInReportingTimezone(startDate: string, endDate: string): { startIso: string; endIso: string } {
+  const parse = (value: string) => {
+    const [year, month, day] = value.split("-").map((part) => Number.parseInt(part, 10));
+    return { year, month, day };
+  };
+  const startParts = parse(startDate);
+  const endParts = parse(endDate);
+  const start = utcFromZonedDateTime(
+    ANALYTICS_REPORTING_TIMEZONE,
+    startParts.year,
+    startParts.month,
+    startParts.day,
+    0,
+    0,
+    0,
+    0,
+  );
+  const end = utcFromZonedDateTime(
+    ANALYTICS_REPORTING_TIMEZONE,
+    endParts.year,
+    endParts.month,
+    endParts.day,
+    23,
+    59,
+    59,
+    999,
+  );
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
+function passesBaseAnalyticsFilters(
+  row: AnalyticsFilterRow,
+  trafficFilter: TrafficFilter,
+  includeLocalDev?: boolean,
+  sourceFilter?: string,
+): boolean {
+  return (
+    !rowIsLocalhost(row) &&
+    !shouldExcludeLocalDevRow(row, trafficFilter, includeLocalDev) &&
+    matchesTrafficFilter(inferSessionTypeFromRow(row), trafficFilter) &&
+    matchesSourceFilter(row, sourceFilter)
+  );
+}
+
+function buildIncludedSessionIds(opts: {
+  sessions: SessionRow[];
+  events: EventRow[];
+  pageViews: PageViewRow[];
+  deviceFilter?: string;
+}): Set<string> {
+  const sessionById = new Map(opts.sessions.map((session) => [session.session_id, session]));
+  const ids = new Set<string>();
+  for (const session of opts.sessions) ids.add(session.session_id);
+  for (const event of opts.events) ids.add(event.session_id);
+  for (const pageView of opts.pageViews) ids.add(pageView.session_id);
+
+  const deviceFilter = (opts.deviceFilter ?? "").trim().toLowerCase();
+  if (!deviceFilter || deviceFilter === "all") return ids;
+
+  return new Set(
+    [...ids].filter((sessionId) => {
+      const session = sessionById.get(sessionId);
+      if (!session) return true;
+      return matchesDeviceFilter(session, opts.deviceFilter);
+    }),
+  );
+}
+
 export function resolveAnalyticsRange(params: {
   range?: string;
   start?: string;
@@ -77,13 +202,12 @@ export function resolveAnalyticsRange(params: {
   } else if (range === "30d") {
     start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   } else if (range === "custom" && params.start && params.end) {
-    const s = new Date(`${params.start}T00:00:00.000Z`);
-    const e = new Date(`${params.end}T23:59:59.999Z`);
-    if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && s <= e) {
+    const { startIso, endIso } = dayBoundsInReportingTimezone(params.start, params.end);
+    if (startIso <= endIso) {
       return {
         key: "custom",
-        startIso: s.toISOString(),
-        endIso: e.toISOString(),
+        startIso,
+        endIso,
         startDate: params.start,
         endDate: params.end,
       };
@@ -255,12 +379,12 @@ export async function fetchAdminAnalyticsDashboard(
   const startIso = range.startIso;
   const endIso = range.endIso;
 
+  const sessionRangeFilter = `and(created_at.gte.${startIso},created_at.lte.${endIso}),and(last_seen_at.gte.${startIso},last_seen_at.lte.${endIso})`;
   const [sessionsRes, eventsRes, pageViewsRes, eventStreamRes] = await Promise.all([
     svc
       .from("analytics_sessions")
       .select("session_id, session_type, normalized_source, normalized_referrer, created_at, first_page, last_page, referrer, utm_source, utm_campaign, device_type, browser, metadata")
-      .gte("created_at", startIso)
-      .lte("created_at", endIso)
+      .or(sessionRangeFilter)
       .order("created_at", { ascending: false })
       .limit(5000),
     svc
@@ -291,31 +415,29 @@ export async function fetchAdminAnalyticsDashboard(
   if (pageViewsRes.error) throw new Error(pageViewsRes.error.message);
   if (eventStreamRes.error) throw new Error(eventStreamRes.error.message);
 
-  const sessions = ((sessionsRes.data ?? []) as (SessionRow & { metadata?: Record<string, unknown> | null })[])
-    .filter((s) => !rowIsLocalhost(s))
-    .filter((s) => !shouldExcludeLocalDevRow(s, trafficFilter, includeLocalDev))
-    .filter((s) => matchesTrafficFilter(inferSessionTypeFromRow(s), trafficFilter))
-    .filter((s) => matchesSourceFilter(s, filters.sourceFilter))
-    .filter((s) => matchesDeviceFilter(s, filters.deviceFilter));
-  const includedSessionIds = new Set(sessions.map((s) => s.session_id));
-  const events = ((eventsRes.data ?? []) as EventRow[])
-    .filter((e) => !rowIsLocalhost(e))
-    .filter((e) => !shouldExcludeLocalDevRow(e, trafficFilter, includeLocalDev))
-    .filter((e) => matchesTrafficFilter(inferSessionTypeFromRow(e), trafficFilter))
-    .filter((e) => includedSessionIds.has(e.session_id))
-    .filter((e) => matchesSourceFilter(e, filters.sourceFilter));
-  const pageViews = ((pageViewsRes.data ?? []) as (PageViewRow & { metadata?: Record<string, unknown> | null })[])
-    .filter((pv) => !rowIsLocalhost(pv))
-    .filter((pv) => !shouldExcludeLocalDevRow(pv, trafficFilter, includeLocalDev))
-    .filter((pv) => matchesTrafficFilter(inferSessionTypeFromRow(pv), trafficFilter))
-    .filter((pv) => includedSessionIds.has(pv.session_id))
-    .filter((pv) => matchesSourceFilter(pv, filters.sourceFilter));
-  const eventStream = ((eventStreamRes.data ?? []) as EventRow[])
-    .filter((e) => !rowIsLocalhost(e))
-    .filter((e) => !shouldExcludeLocalDevRow(e, trafficFilter, includeLocalDev))
-    .filter((e) => matchesTrafficFilter(inferSessionTypeFromRow(e), trafficFilter))
-    .filter((e) => includedSessionIds.has(e.session_id))
-    .filter((e) => matchesSourceFilter(e, filters.sourceFilter));
+  const rawSessions = (sessionsRes.data ?? []) as (SessionRow & { metadata?: Record<string, unknown> | null })[];
+  const rawEvents = (eventsRes.data ?? []) as EventRow[];
+  const rawPageViews = (pageViewsRes.data ?? []) as (PageViewRow & { metadata?: Record<string, unknown> | null })[];
+  const rawEventStream = (eventStreamRes.data ?? []) as EventRow[];
+
+  const sessionsBeforeDevice = rawSessions
+    .filter((s) => passesBaseAnalyticsFilters(s, trafficFilter, includeLocalDev, filters.sourceFilter));
+  const eventsBeforeDevice = rawEvents
+    .filter((e) => passesBaseAnalyticsFilters(e, trafficFilter, includeLocalDev, filters.sourceFilter));
+  const pageViewsBeforeDevice = rawPageViews
+    .filter((pv) => passesBaseAnalyticsFilters(pv, trafficFilter, includeLocalDev, filters.sourceFilter));
+  const includedSessionIds = buildIncludedSessionIds({
+    sessions: sessionsBeforeDevice,
+    events: eventsBeforeDevice,
+    pageViews: pageViewsBeforeDevice,
+    deviceFilter: filters.deviceFilter,
+  });
+  const sessions = sessionsBeforeDevice.filter((s) => includedSessionIds.has(s.session_id));
+  const events = eventsBeforeDevice.filter((e) => includedSessionIds.has(e.session_id));
+  const pageViews = pageViewsBeforeDevice.filter((pv) => includedSessionIds.has(pv.session_id));
+  const eventStream = rawEventStream
+    .filter((e) => passesBaseAnalyticsFilters(e, trafficFilter, includeLocalDev, filters.sourceFilter))
+    .filter((e) => includedSessionIds.has(e.session_id));
 
   const rawSessionsInRange = (sessionsRes.data ?? []) as (SessionRow & { metadata?: Record<string, unknown> | null })[];
 
@@ -779,8 +901,9 @@ export async function fetchAdminAnalyticsExportForRange(range: AnalyticsRange, o
       .select(
         "session_id, session_type, normalized_source, normalized_referrer, created_at, last_seen_at, first_page, last_page, referrer, utm_source, utm_medium, utm_campaign, device_type, browser, os, country, region, city, metadata",
       )
-      .gte("created_at", range.startIso)
-      .lte("created_at", range.endIso)
+      .or(
+        `and(created_at.gte.${range.startIso},created_at.lte.${range.endIso}),and(last_seen_at.gte.${range.startIso},last_seen_at.lte.${range.endIso})`,
+      )
       .order("created_at", { ascending: false }),
     svc
       .from("analytics_events")
@@ -828,27 +951,26 @@ export async function fetchAdminAnalyticsExportForRange(range: AnalyticsRange, o
   const allEventsInRange = (eventsRes.data ?? []) as Array<EventRow & { metadata?: Record<string, unknown> | null }>;
   const allPageViewsInRange = (pageViewsRes.data ?? []) as Array<PageViewRow & { metadata?: Record<string, unknown> | null }>;
 
-  const filteredSessionsRaw = allSessionsInRange
-    .filter((s) => !rowIsLocalhost(s))
-    .filter((s) => !shouldExcludeLocalDevRow(s, trafficFilter, includeLocalDev))
-    .filter((s) => matchesTrafficFilter(inferSessionTypeFromRow(s), trafficFilter))
-    .filter((s) => matchesSourceFilter(s, options.sourceFilter))
-    .filter((s) => matchesDeviceFilter(s, options.deviceFilter));
-  const includedSessionIds = new Set(filteredSessionsRaw.map((s) => s.session_id));
-  const filteredEventsRaw = allEventsInRange
-    .filter((e) => !rowIsLocalhost(e))
-    .filter((e) => !shouldExcludeLocalDevRow(e, trafficFilter, includeLocalDev))
-    .filter((e) => matchesTrafficFilter(inferSessionTypeFromRow(e), trafficFilter))
-    .filter((e) => includedSessionIds.has(e.session_id))
-    .filter((e) => matchesSourceFilter(e, options.sourceFilter));
-  const filteredPageViewsRaw = allPageViewsInRange
-    .filter((pv) => !rowIsLocalhost(pv))
-    .filter((pv) => !shouldExcludeLocalDevRow(pv, trafficFilter, includeLocalDev))
-    .filter((pv) => matchesTrafficFilter(inferSessionTypeFromRow(pv), trafficFilter))
-    .filter((pv) => includedSessionIds.has(pv.session_id))
-    .filter((pv) => matchesSourceFilter(pv, options.sourceFilter));
+  const filteredSessionsRaw = allSessionsInRange.filter((s) =>
+    passesBaseAnalyticsFilters(s, trafficFilter, includeLocalDev, options.sourceFilter),
+  );
+  const filteredEventsBeforeDevice = allEventsInRange.filter((e) =>
+    passesBaseAnalyticsFilters(e, trafficFilter, includeLocalDev, options.sourceFilter),
+  );
+  const filteredPageViewsBeforeDevice = allPageViewsInRange.filter((pv) =>
+    passesBaseAnalyticsFilters(pv, trafficFilter, includeLocalDev, options.sourceFilter),
+  );
+  const includedSessionIds = buildIncludedSessionIds({
+    sessions: filteredSessionsRaw,
+    events: filteredEventsBeforeDevice,
+    pageViews: filteredPageViewsBeforeDevice,
+    deviceFilter: options.deviceFilter,
+  });
+  const filteredEventsRaw = filteredEventsBeforeDevice.filter((e) => includedSessionIds.has(e.session_id));
+  const filteredPageViewsRaw = filteredPageViewsBeforeDevice.filter((pv) => includedSessionIds.has(pv.session_id));
+  const filteredSessionsWithDevice = filteredSessionsRaw.filter((s) => includedSessionIds.has(s.session_id));
 
-  const sessions = filteredSessionsRaw
+  const sessions = filteredSessionsWithDevice
     .map((s) => ({
     ...s,
     metadata: redactSensitiveObject(s.metadata),

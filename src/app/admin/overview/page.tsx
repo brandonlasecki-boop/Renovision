@@ -198,6 +198,16 @@ export default async function AdminOverviewPage({
   ] as const;
 
   const rangeHref = (preset: "24h" | "7d" | "30d") => `/admin/overview?range=${preset}`;
+  const rangeLabel =
+    range.key === "custom"
+      ? range.startDate === range.endDate
+        ? range.startDate
+        : `${range.startDate} – ${range.endDate}`
+      : range.key === "24h"
+        ? "Last 24 hours"
+        : range.key === "7d"
+          ? "Last 7 days"
+          : "Last 30 days";
 
   return (
     <div className="space-y-6">
@@ -207,7 +217,7 @@ export default async function AdminOverviewPage({
           Executive command center: what happened and what needs attention
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Range: <span className="font-medium text-foreground">{range.key === "24h" ? "Last 24 hours" : range.key === "7d" ? "Last 7 days" : "Last 30 days"}</span>
+          Range: <span className="font-medium text-foreground">{rangeLabel}</span>
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {([
@@ -227,6 +237,31 @@ export default async function AdminOverviewPage({
             </Link>
           ))}
         </div>
+        <form action="/admin/overview" method="get" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-border/70 p-3">
+          <input type="hidden" name="range" value="custom" />
+          <label className="text-xs text-muted-foreground">
+            Start date
+            <input
+              name="start"
+              type="date"
+              defaultValue={range.startDate}
+              className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            End date
+            <input
+              name="end"
+              type="date"
+              defaultValue={range.endDate}
+              className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm"
+            />
+          </label>
+          <button type="submit" className="h-9 rounded-md border border-border px-3 text-sm hover:bg-muted/40">
+            Apply dates
+          </button>
+          <p className="text-xs text-muted-foreground">Set the same start and end date to view one calendar day.</p>
+        </form>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

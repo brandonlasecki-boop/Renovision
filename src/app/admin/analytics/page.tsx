@@ -88,8 +88,20 @@ export default async function AdminAnalyticsPage({
       <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
         <h1 className="text-2xl font-bold tracking-tight">Admin funnel analytics dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Customer traffic only by default, excluding admin and local_dev.
+          Customer traffic only by default, excluding admin and local_dev. Custom date ranges use US Eastern calendar days.
         </p>
+        {range.key === "custom" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Showing activity from <span className="font-medium text-foreground">{range.startDate}</span>
+            {range.startDate === range.endDate ? "" : (
+              <>
+                {" "}
+                through <span className="font-medium text-foreground">{range.endDate}</span>
+              </>
+            )}
+            .
+          </p>
+        ) : null}
         <div className="mt-5 space-y-3">
           <p className="text-sm font-medium">Date and filter controls</p>
           <div className="flex flex-wrap gap-2">
@@ -169,6 +181,9 @@ export default async function AdminAnalyticsPage({
             <button type="submit" className="h-9 rounded-md border border-border px-3 text-sm hover:bg-muted/40">
               Apply filters
             </button>
+            <p className="w-full text-xs text-muted-foreground">
+              Use the same start and end date to view one calendar day. If weekend numbers look empty, try Include admin or Include local_dev.
+            </p>
             <a href={exportHref} className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm hover:bg-muted/40">
               Export JSON
             </a>
